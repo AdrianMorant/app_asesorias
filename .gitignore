@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Next.js & Frontend builds
+frontend/.next/
+frontend/out/
+frontend/build/
+*.tsbuildinfo
+next-env.d.ts
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+backend/invoices_accounting.db
+
+# Environment variables & secrets (CRITICAL)
+.env
+.env*
+!.env.example
+backend/.env
+backend/.env*
+!backend/.env.example
+frontend/.env
+frontend/.env*
+!frontend/.env.example
+
+# Runtime uploads and storage
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/storage/*
+!backend/storage/.gitkeep
+backend/storage_test/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
