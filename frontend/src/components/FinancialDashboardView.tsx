@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { OnboardingGuideCard } from './OnboardingGuideCard';
+import { ActivityAuditTimeline } from './ActivityAuditTimeline';
 
 interface FinancialDashboardViewProps {
   company: Company;
@@ -681,6 +682,13 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* 5. REGISTRO DE ACTIVIDAD Y AUDITORÍA CONTABLE (FASE D) */}
+      <ActivityAuditTimeline
+        company={company}
+        invoices={invoices}
+        onNavigateTab={onNavigateTab}
+      />
     </div>
   );
 };

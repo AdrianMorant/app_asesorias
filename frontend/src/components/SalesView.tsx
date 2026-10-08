@@ -303,8 +303,8 @@ export const SalesView: React.FC<SalesViewProps> = ({
             No hay documentos emitidos que coincidan con la búsqueda.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full min-w-[800px] text-left text-xs">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider font-semibold border-b border-slate-200">
                 <tr>
                   <th className="py-2.5 px-4">Número</th>

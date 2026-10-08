@@ -218,8 +218,8 @@ export const InvoiceTable: React.FC<Props> = ({
       </div>
 
       {/* Tabla de Facturas */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs border-collapse">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full min-w-[850px] text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-950/40 text-[11px] text-slate-400 uppercase tracking-wider">
               {/* Checkbox select all */}

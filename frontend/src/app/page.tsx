@@ -39,6 +39,7 @@ import { CompanyManagerModal } from '@/components/CompanyManagerModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { MultiInvoiceSplitterModal } from '@/components/MultiInvoiceSplitterModal';
 import { InteractiveDemoModal } from '@/components/InteractiveDemoModal';
+import { NotificationCenterDrawer } from '@/components/NotificationCenterDrawer';
 import { ToastContainer, ToastMessage } from '@/components/Toast';
 
 import {
@@ -56,6 +57,8 @@ import {
   XCircle,
   FolderOpen,
   Sparkles,
+  Bell,
+  Menu,
 } from 'lucide-react';
 
 export default function AppSuitePage() {
@@ -67,9 +70,11 @@ export default function AppSuitePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Estados del Modo SaaS, Demo Guiada y Copiloto IA (Fases A, B y C)
+  // Estados del Modo SaaS, Demo Guiada, Notificaciones y Copiloto IA (Fases A, B, C y D)
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState<boolean>(false);
   const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [aiAssistantInitialQuery, setAiAssistantInitialQuery] = useState<string>('');
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('client');
 
@@ -364,33 +369,82 @@ export default function AppSuitePage() {
       {/* Toast Notificaciones Flotantes */}
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
-      {/* 1. SIDEBAR LATERAL PERSISTENTE */}
-      <Sidebar
-        currentTab={currentTab}
-        onSelectTab={(tab) => {
-          if (tab === 'companies') {
-            setShowCompanyManagerModal(true);
-          } else {
-            setCurrentTab(tab);
-          }
-        }}
-        companies={companies}
-        selectedCompanyId={selectedCompanyId}
-        onSelectCompany={(id) => setSelectedCompanyId(id)}
-        onOpenCompanyManager={() => setShowCompanyManagerModal(true)}
-        pendingInvoicesCount={pendingCount}
-        yellowInvoicesCount={yellowCount}
-        redInvoicesCount={redCount}
-        mode={workspaceMode}
-        onModeChange={setWorkspaceMode}
-      />
+      {/* 1. SIDEBAR DESKTOP */}
+      <div className="hidden lg:flex flex-shrink-0">
+        <Sidebar
+          currentTab={currentTab}
+          onSelectTab={(tab) => {
+            if (tab === 'companies') {
+              setShowCompanyManagerModal(true);
+            } else {
+              setCurrentTab(tab);
+            }
+          }}
+          companies={companies}
+          selectedCompanyId={selectedCompanyId}
+          onSelectCompany={(id) => setSelectedCompanyId(id)}
+          onOpenCompanyManager={() => setShowCompanyManagerModal(true)}
+          pendingInvoicesCount={pendingCount}
+          yellowInvoicesCount={yellowCount}
+          redInvoicesCount={redCount}
+          mode={workspaceMode}
+          onModeChange={setWorkspaceMode}
+        />
+      </div>
+
+      {/* 1.1 SIDEBAR MÓVIL EN DRAWER CON BACKDROP */}
+      {isMobileSidebarOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+          <div className="relative z-10 flex flex-col w-64 max-w-[85vw] h-full shadow-2xl animate-in slide-in-from-left duration-200">
+            <Sidebar
+              currentTab={currentTab}
+              onSelectTab={(tab) => {
+                setIsMobileSidebarOpen(false);
+                if (tab === 'companies') {
+                  setShowCompanyManagerModal(true);
+                } else {
+                  setCurrentTab(tab);
+                }
+              }}
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onSelectCompany={(id) => {
+                setSelectedCompanyId(id);
+                setIsMobileSidebarOpen(false);
+              }}
+              onOpenCompanyManager={() => {
+                setIsMobileSidebarOpen(false);
+                setShowCompanyManagerModal(true);
+              }}
+              pendingInvoicesCount={pendingCount}
+              yellowInvoicesCount={yellowCount}
+              redInvoicesCount={redCount}
+              mode={workspaceMode}
+              onModeChange={setWorkspaceMode}
+            />
+          </div>
+        </div>
+      )}
 
       {/* 2. ÁREA DE CONTENIDO PRINCIPAL */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Barra Superior Corporativa */}
-        <header className="h-14 bg-white border-b border-slate-200/80 px-6 flex items-center justify-between shrink-0 shadow-xs">
-          <div className="flex items-center gap-3">
-            <h2 className="text-sm font-bold text-slate-800 tracking-tight">
+        <header className="h-14 bg-white border-b border-slate-200/80 px-4 sm:px-6 flex items-center justify-between shrink-0 shadow-xs">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Botón Hamburguesa Móvil (Fase D) */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="lg:hidden p-1.5 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+              title="Abrir menú de navegación"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <h2 className="text-sm font-bold text-slate-800 tracking-tight truncate">
               {currentTab === 'dashboard' && 'Dashboard General Financiero'}
               {currentTab === 'sales' && 'Ventas y Facturación Emitida'}
               {currentTab === 'expenses' && 'Gastos, Compras e Ingesta IA'}
@@ -402,21 +456,36 @@ export default function AppSuitePage() {
             </h2>
 
             {selectedCompany && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
+              <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
                 {selectedCompany.razon_social} ({selectedCompany.cif})
               </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Botón Destacado Copiloto IA */}
             <button
               onClick={() => setIsAIAssistantOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-sm transition-all active:scale-95"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Copiloto IA</span>
+              <span className="hidden sm:inline">Copiloto IA</span>
+            </button>
+
+            {/* Centro de Notificaciones Inteligentes (Fase D) */}
+            <button
+              onClick={() => setIsNotificationsOpen(true)}
+              className="relative p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+              title="Centro de notificaciones y alertas"
+            >
+              <Bell className="w-4 h-4" />
+              {invoices.filter((i) => i.status === 'RED').length > 0 && (
+                <span className="absolute top-1.5 right-1.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                </span>
+              )}
             </button>
 
             {/* Recargar datos */}
@@ -438,7 +507,7 @@ export default function AppSuitePage() {
                 }
               }}
               disabled={refreshing}
-              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors"
+              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors hidden sm:block"
               title="Refrescar datos"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
@@ -447,7 +516,7 @@ export default function AppSuitePage() {
             {/* Probar Demo Guiada (Fase C) */}
             <button
               onClick={() => setIsDemoModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-sm shadow-cyan-600/20 active:scale-95 transition-all"
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-sm shadow-cyan-600/20 active:scale-95 transition-all"
             >
               <Sparkles className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
               <span className="hidden sm:inline">Probar Demo Guiada (1 min)</span>
@@ -457,7 +526,7 @@ export default function AppSuitePage() {
             {/* Manual Operativo */}
             <button
               onClick={() => setShowManualModal(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
+              className="hidden md:flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors"
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span>Manual</span>
@@ -469,7 +538,7 @@ export default function AppSuitePage() {
               className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-900 hover:bg-slate-800 text-white transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Nueva Empresa</span>
+              <span className="hidden sm:inline">Nueva Empresa</span>
             </button>
           </div>
         </header>
@@ -934,6 +1003,21 @@ export default function AppSuitePage() {
           }}
           mode={workspaceMode}
           initialQuery={aiAssistantInitialQuery}
+        />
+      )}
+
+      {/* Centro de Notificaciones Inteligentes (Fase D) */}
+      {selectedCompany && (
+        <NotificationCenterDrawer
+          isOpen={isNotificationsOpen}
+          onClose={() => setIsNotificationsOpen(false)}
+          invoices={invoices}
+          company={selectedCompany}
+          onNavigateTab={(tab) => setCurrentTab(tab)}
+          onSelectInvoice={(inv) => {
+            setActiveInvoice(inv);
+            setCurrentTab('expenses');
+          }}
         />
       )}
     </div>
