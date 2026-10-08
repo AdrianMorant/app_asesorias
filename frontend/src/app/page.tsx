@@ -38,6 +38,7 @@ import { ManualModal } from '@/components/ManualModal';
 import { CompanyManagerModal } from '@/components/CompanyManagerModal';
 import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { MultiInvoiceSplitterModal } from '@/components/MultiInvoiceSplitterModal';
+import { InteractiveDemoModal } from '@/components/InteractiveDemoModal';
 import { ToastContainer, ToastMessage } from '@/components/Toast';
 
 import {
@@ -66,8 +67,9 @@ export default function AppSuitePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Estados del Modo SaaS y Copiloto IA (Fase A y B)
+  // Estados del Modo SaaS, Demo Guiada y Copiloto IA (Fases A, B y C)
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState<boolean>(false);
+  const [isDemoModalOpen, setIsDemoModalOpen] = useState<boolean>(false);
   const [aiAssistantInitialQuery, setAiAssistantInitialQuery] = useState<string>('');
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('client');
 
@@ -442,6 +444,16 @@ export default function AppSuitePage() {
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
             </button>
 
+            {/* Probar Demo Guiada (Fase C) */}
+            <button
+              onClick={() => setIsDemoModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white shadow-sm shadow-cyan-600/20 active:scale-95 transition-all"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-200 animate-pulse" />
+              <span className="hidden sm:inline">Probar Demo Guiada (1 min)</span>
+              <span className="sm:hidden">Demo</span>
+            </button>
+
             {/* Manual Operativo */}
             <button
               onClick={() => setShowManualModal(true)}
@@ -486,6 +498,8 @@ export default function AppSuitePage() {
                   }}
                   onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
                   mode={workspaceMode}
+                  onOpenDemo={() => setIsDemoModalOpen(true)}
+                  onOpenUpload={() => setCurrentTab('expenses')}
                 />
               )}
 
@@ -559,6 +573,7 @@ export default function AppSuitePage() {
                     <UploadDropzone
                       companyId={selectedCompanyId}
                       onInvoiceUploaded={handleInvoiceUploaded}
+                      onOpenSplitter={handleOpenSplitter}
                     />
                   </div>
 
@@ -865,6 +880,16 @@ export default function AppSuitePage() {
           onNotify={notify}
         />
       )}
+
+      {/* Modal de Demostración Interactiva Guiada (Fase C) */}
+      <InteractiveDemoModal
+        isOpen={isDemoModalOpen}
+        onClose={() => setIsDemoModalOpen(false)}
+        onGoToRealApp={() => {
+          setIsDemoModalOpen(false);
+          setCurrentTab('expenses');
+        }}
+      />
 
       {/* Botón Flotante Permanente del Copiloto Konta IA */}
       <button

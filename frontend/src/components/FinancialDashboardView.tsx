@@ -23,6 +23,7 @@ import {
   ArrowRight,
   Zap,
 } from 'lucide-react';
+import { OnboardingGuideCard } from './OnboardingGuideCard';
 
 interface FinancialDashboardViewProps {
   company: Company;
@@ -31,6 +32,8 @@ interface FinancialDashboardViewProps {
   onSelectInvoice?: (invoice: Invoice) => void;
   onOpenAIAssistant?: () => void;
   mode?: 'advisor' | 'client';
+  onOpenDemo?: () => void;
+  onOpenUpload?: () => void;
 }
 
 export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
@@ -40,6 +43,8 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
   onSelectInvoice,
   onOpenAIAssistant,
   mode = 'client',
+  onOpenDemo,
+  onOpenUpload,
 }) => {
   const [sales, setSales] = useState<SalesInvoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -171,21 +176,42 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
           </p>
         </div>
 
-        {onOpenAIAssistant && (
-          <button
-            onClick={onOpenAIAssistant}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all shadow-md active:scale-95 ${
-              isAdvisor
-                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-1 ring-blue-400/30'
-                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 ring-1 ring-emerald-400/30'
-            }`}
-          >
-            <Sparkles className="w-4 h-4 animate-spin text-white" />
-            <span>Consultar Copiloto IA</span>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2.5">
+          {onOpenDemo && (
+            <button
+              onClick={onOpenDemo}
+              className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl font-bold text-xs bg-slate-800/90 hover:bg-slate-750 text-cyan-300 border border-slate-700 hover:border-cyan-500/50 transition-all shadow-sm active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Probar Demo Guiada (1 min)</span>
+            </button>
+          )}
+
+          {onOpenAIAssistant && (
+            <button
+              onClick={onOpenAIAssistant}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all shadow-md active:scale-95 ${
+                isAdvisor
+                  ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-1 ring-blue-400/30'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 ring-1 ring-emerald-400/30'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 animate-spin text-white" />
+              <span>Consultar Copiloto IA</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Widget de Onboarding en 3 Pasos (Fase C) */}
+      <OnboardingGuideCard
+        company={company}
+        invoicesCount={invoices.length}
+        onNavigateTab={onNavigateTab}
+        onOpenUpload={onOpenUpload}
+        onOpenDemo={onOpenDemo}
+      />
 
       {/* Banner Proactivo del Agente IA */}
       <div className="bg-gradient-to-r from-indigo-900/40 via-slate-900/50 to-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-slate-200 shadow-sm">
