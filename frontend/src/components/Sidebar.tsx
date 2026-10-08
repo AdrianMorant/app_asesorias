@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Sparkles,
   ShieldCheck,
+  Scale,
   CheckCircle2,
   AlertTriangle,
   XCircle,
@@ -159,8 +160,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       group: 'CONTABILIDAD Y FISCAL',
-      advisorOnly: true,
+      advisorOnly: false,
       items: [
+        {
+          id: 'taxes' as ActiveNavTab,
+          label: 'Panel Fiscal e IVA',
+          icon: Scale,
+          badge: (
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-mono">
+              303
+            </span>
+          ),
+          advisorOnly: false,
+        },
         {
           id: 'journal' as ActiveNavTab,
           label: 'Libro Diario y Mayor',
@@ -172,13 +184,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: 'chart-of-accounts' as ActiveNavTab,
           label: 'Plan Contable PYME',
           icon: Table2,
-          badge: null,
-          advisorOnly: true,
-        },
-        {
-          id: 'taxes' as ActiveNavTab,
-          label: 'Impuestos (303/111/115/347)',
-          icon: ShieldCheck,
           badge: null,
           advisorOnly: true,
         },

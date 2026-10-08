@@ -25,6 +25,7 @@ import { ContactsView } from '@/components/ContactsView';
 import { JournalView } from '@/components/JournalView';
 import { ChartOfAccountsView } from '@/components/ChartOfAccountsView';
 import { TaxModelsView } from '@/components/TaxModelsView';
+import { TaxDashboardView } from '@/components/TaxDashboardView';
 import { IntegrationsView } from '@/components/IntegrationsView';
 import { BankReconciliationView } from '@/components/BankReconciliationView';
 
@@ -65,9 +66,15 @@ export default function AppSuitePage() {
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
 
-  // Estados del Modo SaaS y Copiloto IA (Fase A)
+  // Estados del Modo SaaS y Copiloto IA (Fase A y B)
   const [isAIAssistantOpen, setIsAIAssistantOpen] = useState<boolean>(false);
+  const [aiAssistantInitialQuery, setAiAssistantInitialQuery] = useState<string>('');
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('client');
+
+  const handleOpenAIAssistantWithQuery = (query: string) => {
+    setAiAssistantInitialQuery(query);
+    setIsAIAssistantOpen(true);
+  };
 
   // Módulo activo en el Sidebar
   const [currentTab, setCurrentTab] = useState<ActiveNavTab>('dashboard');
@@ -606,9 +613,17 @@ export default function AppSuitePage() {
                 <ChartOfAccountsView company={selectedCompany} notify={notify} />
               )}
 
-              {/* VISTA 7: IMPUESTOS Y MODELOS TRIBUTARIOS */}
+              {/* VISTA 7: PANEL FISCAL PARA NO CONTABLES Y MODELOS TRIBUTARIOS (FASE B) */}
               {currentTab === 'taxes' && (
-                <TaxModelsView company={selectedCompany} onNotify={notify} />
+                <TaxDashboardView
+                  company={selectedCompany}
+                  invoices={invoices}
+                  sales={sales}
+                  onNotify={notify}
+                  onNavigateTab={(tab) => setCurrentTab(tab)}
+                  onOpenAIAssistantWithQuery={handleOpenAIAssistantWithQuery}
+                  mode={workspaceMode}
+                />
               )}
 
               {/* VISTA 8: CENTRO DE INTEGRACIONES Y ENLACE CONTABLE */}
@@ -880,7 +895,10 @@ export default function AppSuitePage() {
       {selectedCompany && (
         <AIAssistantDrawer
           isOpen={isAIAssistantOpen}
-          onClose={() => setIsAIAssistantOpen(false)}
+          onClose={() => {
+            setIsAIAssistantOpen(false);
+            setAiAssistantInitialQuery('');
+          }}
           company={selectedCompany}
           invoices={invoices}
           sales={sales}
@@ -890,6 +908,7 @@ export default function AppSuitePage() {
             setCurrentTab('expenses');
           }}
           mode={workspaceMode}
+          initialQuery={aiAssistantInitialQuery}
         />
       )}
     </div>

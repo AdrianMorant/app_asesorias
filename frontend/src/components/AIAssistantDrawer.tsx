@@ -67,6 +67,7 @@ interface AIAssistantDrawerProps {
   onNavigateTab: (tab: ActiveNavTab) => void;
   onSelectInvoice?: (invoice: Invoice) => void;
   mode?: WorkspaceMode;
+  initialQuery?: string;
 }
 
 export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
@@ -78,6 +79,7 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
   onNavigateTab,
   onSelectInvoice,
   mode = 'client',
+  initialQuery,
 }) => {
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -105,8 +107,13 @@ export const AIAssistantDrawer: React.FC<AIAssistantDrawerProps> = ({
     if (isOpen) {
       setTimeout(() => inputRef.current?.focus(), 250);
       scrollToBottom();
+      if (initialQuery) {
+        setTimeout(() => {
+          handleSendMessage(initialQuery);
+        }, 350);
+      }
     }
-  }, [isOpen, messages]);
+  }, [isOpen, initialQuery]);
 
   // Mensaje de bienvenida inicial
   useEffect(() => {

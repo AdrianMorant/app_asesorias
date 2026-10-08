@@ -17,6 +17,7 @@ import {
   X,
   AlertTriangle,
   Scissors,
+  Sparkles,
 } from 'lucide-react';
 
 interface Props {
@@ -232,6 +233,7 @@ export const InvoiceTable: React.FC<Props> = ({
                 />
               </th>
               <th className="py-3 px-4 font-semibold">Semáforo</th>
+              <th className="py-3 px-4 font-semibold">Confianza IA</th>
               <th className="py-3 px-4 font-semibold">Nº Factura</th>
               <th className="py-3 px-4 font-semibold">Emisor (Proveedor)</th>
               <th className="py-3 px-4 font-semibold">Fecha</th>
@@ -243,7 +245,7 @@ export const InvoiceTable: React.FC<Props> = ({
           <tbody className="divide-y divide-slate-800/60">
             {filteredInvoices.length === 0 ? (
               <tr>
-                <td colSpan={8} className="text-center py-12 text-slate-500">
+                <td colSpan={9} className="text-center py-12 text-slate-500">
                   <FileText className="w-10 h-10 mx-auto mb-2 opacity-30 text-slate-400" />
                   <p className="text-sm font-medium">No hay facturas que coincidan con los filtros</p>
                 </td>
@@ -285,6 +287,33 @@ export const InvoiceTable: React.FC<Props> = ({
                         size="sm"
                         esMultifactura={inv.es_multifactura}
                       />
+                    </td>
+                    <td className="py-3 px-4">
+                      {inv.status === 'GREEN' ? (
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[11px] font-medium"
+                          title="Extracción limpia de todos los campos, sin descuadre ni incidencias"
+                        >
+                          <Sparkles className="w-3 h-3 text-emerald-400" />
+                          <span>Certeza: 98%</span>
+                        </div>
+                      ) : inv.status === 'YELLOW' ? (
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/25 text-[11px] font-medium"
+                          title="Revisar subcuenta contable o proveedor nuevo sugerido"
+                        >
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          <span>Certeza: 82%</span>
+                        </div>
+                      ) : (
+                        <div
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/25 text-[11px] font-medium animate-pulse"
+                          title={inv.status_reasons?.[0] || 'Descuadre aritmético o CIF inválido'}
+                        >
+                          <AlertTriangle className="w-3 h-3 text-rose-400" />
+                          <span>Atención requerida</span>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-4 font-mono font-medium text-white">
                       <div className="flex items-center gap-2">

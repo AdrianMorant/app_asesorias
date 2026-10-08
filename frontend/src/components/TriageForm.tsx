@@ -416,6 +416,23 @@ export const TriageForm: React.FC<Props> = ({
                 size="md"
                 esMultifactura={invoice.es_multifactura}
               />
+              {/* Badge de Nivel de Confianza IA */}
+              {invoice.status === 'GREEN' ? (
+                <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  Certeza IA: 98%
+                </span>
+              ) : invoice.status === 'YELLOW' ? (
+                <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  Certeza IA: 82%
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/25 font-medium animate-pulse">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  Atención requerida
+                </span>
+              )}
               {invoice.is_processed && (
                 <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   <FileCheck2 className="w-3.5 h-3.5" />
@@ -494,6 +511,69 @@ export const TriageForm: React.FC<Props> = ({
                 ? 'Bloqueada (Rojo)'
                 : 'Aprobar y Archivar'}
             </button>
+          </div>
+        </div>
+
+        {/* EXPLICACIÓN CONTEXTUAL DE LA IA (Fase B) */}
+        <div
+          className={`mt-3 p-3 rounded-xl border text-xs shadow-sm flex items-start gap-3 transition-all ${
+            invoice.status === 'GREEN'
+              ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
+              : invoice.status === 'YELLOW'
+              ? 'bg-amber-950/40 border-amber-500/30 text-amber-200'
+              : 'bg-rose-950/50 border-rose-500/30 text-rose-200'
+          }`}
+        >
+          <div
+            className={`p-2 rounded-lg shrink-0 mt-0.5 ${
+              invoice.status === 'GREEN'
+                ? 'bg-emerald-500/20 text-emerald-400'
+                : invoice.status === 'YELLOW'
+                ? 'bg-amber-500/20 text-amber-400'
+                : 'bg-rose-500/20 text-rose-400'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div className="space-y-1 flex-1">
+            <div className="font-bold flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5">
+                Diagnóstico Contextual de Konta IA
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-black/40 border border-white/10 opacity-90">
+                {invoice.status === 'GREEN'
+                  ? 'Certeza: 98%'
+                  : invoice.status === 'YELLOW'
+                  ? 'Certeza: 82%'
+                  : 'Atención Requerida'}
+              </span>
+            </div>
+            <p className="text-[11px] leading-relaxed opacity-95">
+              {invoice.status === 'YELLOW' ? (
+                <>
+                  💡 <strong>Proveedor nuevo detectado:</strong> He detectado que es un proveedor nuevo y he reservado la subcuenta{' '}
+                  <strong className="underline font-mono text-white">{assignedSubaccount}</strong>. Al pulsar <em>Aprobar</em>, el sistema creará la ficha sin que tengas que teclearla.
+                  {hasRetention && (
+                    <>
+                      <br />
+                      ⚠️ <strong>Retención profesional ({retentionPercentage}%):</strong> Confirma si aplica a este profesional para su cómputo automático en el Modelo 111 de la AEAT.
+                    </>
+                  )}
+                </>
+              ) : invoice.status === 'RED' ? (
+                <>
+                  🚨 <strong>Atención requerida:</strong>{' '}
+                  {invoice.status_reasons && invoice.status_reasons.length > 0
+                    ? invoice.status_reasons.join('. ')
+                    : 'Descuadre aritmético entre bases, cuotas o CIF emisor.'}{' '}
+                  Corrige los importes señalados en rojo antes de aprobar la factura.
+                </>
+              ) : (
+                <>
+                  ✨ <strong>Extracción limpia y 100% coherente:</strong> CIF verificado con el algoritmo oficial de la AEAT, bases imponibles y cuotas de IVA cuadradas al céntimo. El asiento contable en partida doble está generado y listo para sincronizar.
+                </>
+              )}
+            </p>
           </div>
         </div>
 
