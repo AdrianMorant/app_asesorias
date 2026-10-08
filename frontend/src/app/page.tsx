@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Company, Invoice, Supplier } from '@/types';
+import { Company, Invoice, Supplier, SalesInvoice } from '@/types';
 import {
   fetchCompanies,
   createCompany,
@@ -13,11 +13,13 @@ import {
   deleteInvoice,
   bulkDeleteInvoices,
   getFileUrl,
+  fetchSalesInvoices,
 } from '@/lib/api';
 
 // Componentes modulares de la suite
-import { Sidebar, ActiveNavTab } from '@/components/Sidebar';
+import { Sidebar, ActiveNavTab, WorkspaceMode } from '@/components/Sidebar';
 import { FinancialDashboardView } from '@/components/FinancialDashboardView';
+import { AIAssistantDrawer } from '@/components/AIAssistantDrawer';
 import { SalesView } from '@/components/SalesView';
 import { ContactsView } from '@/components/ContactsView';
 import { JournalView } from '@/components/JournalView';
@@ -51,6 +53,7 @@ import {
   AlertTriangle,
   XCircle,
   FolderOpen,
+  Sparkles,
 } from 'lucide-react';
 
 export default function AppSuitePage() {
@@ -58,8 +61,13 @@ export default function AppSuitePage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [sales, setSales] = useState<SalesInvoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Estados del Modo SaaS y Copiloto IA (Fase A)
+  const [isAIAssistantOpen, setIsAIAssistantOpen] = useState<boolean>(false);
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>('client');
 
   // Módulo activo en el Sidebar
   const [currentTab, setCurrentTab] = useState<ActiveNavTab>('dashboard');
@@ -128,12 +136,14 @@ export default function AppSuitePage() {
       }
 
       if (currentCompanyId) {
-        const [supps, invs] = await Promise.all([
+        const [supps, invs, sls] = await Promise.all([
           fetchSuppliers(currentCompanyId),
           fetchInvoices({ companyId: currentCompanyId }),
+          fetchSalesInvoices(currentCompanyId).catch(() => []),
         ]);
         setSuppliers(supps);
         setInvoices(invs);
+        setSales(sls);
       }
     } catch (err) {
       console.error('Error cargando datos iniciales:', err);
@@ -153,12 +163,14 @@ export default function AppSuitePage() {
     const reloadForCompany = async () => {
       setRefreshing(true);
       try {
-        const [supps, invs] = await Promise.all([
+        const [supps, invs, sls] = await Promise.all([
           fetchSuppliers(selectedCompanyId),
           fetchInvoices({ companyId: selectedCompanyId }),
+          fetchSalesInvoices(selectedCompanyId).catch(() => []),
         ]);
         setSuppliers(supps);
         setInvoices(invs);
+        setSales(sls);
         if (activeInvoice && activeInvoice.company_id !== selectedCompanyId) {
           setActiveInvoice(null);
         }
@@ -360,6 +372,8 @@ export default function AppSuitePage() {
         pendingInvoicesCount={pendingCount}
         yellowInvoicesCount={yellowCount}
         redInvoicesCount={redCount}
+        mode={workspaceMode}
+        onModeChange={setWorkspaceMode}
       />
 
       {/* 2. ÁREA DE CONTENIDO PRINCIPAL */}
@@ -387,6 +401,15 @@ export default function AppSuitePage() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Botón Destacado Copiloto IA */}
+            <button
+              onClick={() => setIsAIAssistantOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-sm transition-all active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Copiloto IA</span>
+            </button>
+
             {/* Recargar datos */}
             <button
               onClick={() => {
@@ -395,9 +418,11 @@ export default function AppSuitePage() {
                   Promise.all([
                     fetchSuppliers(selectedCompanyId),
                     fetchInvoices({ companyId: selectedCompanyId }),
-                  ]).then(([s, invs]) => {
+                    fetchSalesInvoices(selectedCompanyId).catch(() => []),
+                  ]).then(([s, invs, sls]) => {
                     setSuppliers(s);
                     setInvoices(invs);
+                    setSales(sls);
                     notify('info', 'Datos actualizados desde el servidor.');
                     setRefreshing(false);
                   });
@@ -452,6 +477,8 @@ export default function AppSuitePage() {
                     setActiveInvoice(inv);
                     setCurrentTab('expenses');
                   }}
+                  onOpenAIAssistant={() => setIsAIAssistantOpen(true)}
+                  mode={workspaceMode}
                 />
               )}
 
@@ -821,6 +848,48 @@ export default function AppSuitePage() {
           }}
           onSuccess={handleSplitSuccess}
           onNotify={notify}
+        />
+      )}
+
+      {/* Botón Flotante Permanente del Copiloto Konta IA */}
+      <button
+        onClick={() => setIsAIAssistantOpen(true)}
+        className={`fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full shadow-2xl border transition-all group active:scale-95 hover:scale-105 ${
+          workspaceMode === 'advisor'
+            ? 'bg-slate-900 border-blue-500/40 text-white shadow-blue-500/10'
+            : 'bg-slate-900 border-slate-700/80 text-white shadow-slate-950/40'
+        }`}
+      >
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm ${
+            workspaceMode === 'advisor'
+              ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white'
+              : 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+        </div>
+        <div className="text-left pr-1">
+          <span className="text-xs font-bold block leading-none">Copiloto IA</span>
+          <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">Asistente Financiero</span>
+        </div>
+        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+      </button>
+
+      {/* Drawer Deslizante del Copiloto Financiero IA */}
+      {selectedCompany && (
+        <AIAssistantDrawer
+          isOpen={isAIAssistantOpen}
+          onClose={() => setIsAIAssistantOpen(false)}
+          company={selectedCompany}
+          invoices={invoices}
+          sales={sales}
+          onNavigateTab={(tab) => setCurrentTab(tab)}
+          onSelectInvoice={(inv) => {
+            setActiveInvoice(inv);
+            setCurrentTab('expenses');
+          }}
+          mode={workspaceMode}
         />
       )}
     </div>

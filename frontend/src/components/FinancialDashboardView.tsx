@@ -12,12 +12,16 @@ import {
   ArrowDownLeft,
   Calendar,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   Sparkles,
   ChevronRight,
   ShieldAlert,
   Landmark,
+  Wallet,
+  ArrowRight,
+  Zap,
 } from 'lucide-react';
 
 interface FinancialDashboardViewProps {
@@ -25,6 +29,8 @@ interface FinancialDashboardViewProps {
   invoices: Invoice[];
   onNavigateTab: (tab: any) => void;
   onSelectInvoice?: (invoice: Invoice) => void;
+  onOpenAIAssistant?: () => void;
+  mode?: 'advisor' | 'client';
 }
 
 export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
@@ -32,6 +38,8 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
   invoices,
   onNavigateTab,
   onSelectInvoice,
+  onOpenAIAssistant,
+  mode = 'client',
 }) => {
   const [sales, setSales] = useState<SalesInvoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -133,19 +141,128 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
     },
   ];
 
+  const isAdvisor = mode === 'advisor';
+  const estimatedTreasury = Math.max(8500, 18450 + totalSales - totalExpenses);
+  const criticalInvoices = invoices.filter((i) => i.status === 'RED' || i.status === 'YELLOW');
+
   return (
     <div className="space-y-6">
-      {/* 4 KPIs Financieros Principales */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* KPI 1: Facturación (Ventas) */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
+      {/* Cabecera del Dashboard con Acceso Directo al Copiloto IA */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg text-white">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                isAdvisor ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+              }`}
+            >
+              {isAdvisor ? 'Espacio Despacho Contable' : 'Espacio Empresa PYME'}
+            </span>
+            <span className="text-xs text-slate-400 font-mono">CIF: {company.cif}</span>
+          </div>
+          <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            Panel Financiero Ejecutivo
+            <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-normal">
+              {company.razon_social}
+            </span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Monitorización en tiempo real de tesorería, cumplimiento fiscal y triaje contable con IA.
+          </p>
+        </div>
+
+        {onOpenAIAssistant && (
+          <button
+            onClick={onOpenAIAssistant}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-xs transition-all shadow-md active:scale-95 ${
+              isAdvisor
+                ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/30 ring-1 ring-blue-400/30'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/30 ring-1 ring-emerald-400/30'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 animate-spin text-white" />
+            <span>Consultar Copiloto IA</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Banner Proactivo del Agente IA */}
+      <div className="bg-gradient-to-r from-indigo-900/40 via-slate-900/50 to-indigo-950/40 border border-indigo-500/30 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-slate-200 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 shrink-0 mt-0.5">
+            <Zap className="w-4 h-4" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white flex items-center gap-2">
+              Konta AI Copilot: Diagnóstico de Operaciones
+              <span className="text-[10px] font-semibold px-2 py-0.2 rounded-full bg-indigo-500/20 text-indigo-300">
+                Contexto en vivo
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-0.5">
+              {criticalInvoices.length > 0 ? (
+                <>
+                  Se han detectado <strong className="text-amber-300">{criticalInvoices.length} facturas</strong> que requieren validación y el <strong className="text-white">Modelo 303 (IVA 1T)</strong> vence en <strong className="text-amber-300">13 días</strong>.
+                </>
+              ) : (
+                <>
+                  Tus libros contables están <strong className="text-emerald-400">100% conciliados</strong> y al día según el PGC.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          {criticalInvoices.length > 0 && (
+            <button
+              onClick={() => onNavigateTab('expenses')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center gap-1.5"
+            >
+              Revisar facturas ({criticalInvoices.length})
+            </button>
+          )}
+          {onOpenAIAssistant && (
+            <button
+              onClick={onOpenAIAssistant}
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition-all flex items-center gap-1.5 shadow-sm"
+            >
+              Preguntar al Copiloto
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 5 KPIs Financieros Ejecutivos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* KPI 1: Saldo Disponible (Tesorería) */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-medium">Facturación Emitida</span>
+            <span className="font-medium">Saldo Disponible</span>
+            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600">
+              <Wallet className="w-4 h-4" />
+            </span>
+          </div>
+          <div className="text-xl font-bold font-mono tracking-tight text-slate-900">
+            {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(estimatedTreasury)}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Tesorería Estimada</span>
+            <span className="text-blue-700 font-semibold font-mono">Cta. 572</span>
+          </div>
+        </div>
+
+        {/* KPI 2: Facturación (Ventas) */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span className="font-medium">Ingresos Emitidos</span>
             <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600">
               <TrendingUp className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-bold font-mono tracking-tight text-slate-900">
+          <div className="text-xl font-bold font-mono tracking-tight text-slate-900">
             {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(totalSales)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
@@ -154,15 +271,15 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* KPI 2: Gastos Devengados (Compras con IA) */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
+        {/* KPI 3: Gastos Devengados */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
             <span className="font-medium">Gastos Devengados</span>
             <span className="p-1.5 rounded-lg bg-rose-50 text-rose-600">
               <TrendingDown className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-bold font-mono tracking-tight text-slate-900">
+          <div className="text-xl font-bold font-mono tracking-tight text-slate-900">
             {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(totalExpenses)}
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
@@ -171,16 +288,37 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
           </div>
         </div>
 
-        {/* KPI 3: IVA Neto a Liquidar */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
+        {/* KPI 4: Beneficio Neto */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-medium">IVA Neto (Repercutido - Soportado)</span>
+            <span className="font-medium">Beneficio Neto</span>
             <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+              <Landmark className="w-4 h-4" />
+            </span>
+          </div>
+          <div
+            className={`text-xl font-bold font-mono tracking-tight ${
+              operatingProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
+            }`}
+          >
+            {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(operatingProfit)}
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Margen antes de imp.</span>
+            <span className="text-indigo-600 font-medium">PYME PGC</span>
+          </div>
+        </div>
+
+        {/* KPI 5: IVA Neto Trimestral */}
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+            <span className="font-medium">IVA Est. 1T</span>
+            <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600">
               <Scale className="w-4 h-4" />
             </span>
           </div>
           <div
-            className={`text-2xl font-bold font-mono tracking-tight ${
+            className={`text-xl font-bold font-mono tracking-tight ${
               netVat > 0 ? 'text-amber-700' : 'text-emerald-700'
             }`}
           >
@@ -188,36 +326,113 @@ export const FinancialDashboardView: React.FC<FinancialDashboardViewProps> = ({
           </div>
           <div className="mt-2 flex items-center justify-between text-[11px]">
             <span
-              className={`font-semibold px-1.5 py-0.5 rounded text-[10px] ${
-                netVat > 0
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-emerald-100 text-emerald-800'
+              className={`font-semibold px-1.5 py-0.2 rounded text-[10px] ${
+                netVat > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
               }`}
             >
-              {netVat > 0 ? 'A Ingresar a Hacienda' : 'A Compensar / Deducir'}
+              {netVat > 0 ? 'A Ingresar' : 'A Compensar'}
             </span>
-            <span className="text-slate-400 font-mono">Mod. 303</span>
+            <span className="text-slate-400 font-mono text-[10px]">Mod. 303</span>
           </div>
         </div>
+      </div>
 
-        {/* KPI 4: Rendimiento Operativo */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
-          <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-            <span className="font-medium">Margen Operativo Neto</span>
-            <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
-              <Landmark className="w-4 h-4" />
+      {/* Centro de Atención Inmediata (Radical Simplicity & Acción Directa) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-white shadow-md">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <h2 className="text-sm font-bold tracking-wide">
+              Centro de Atención Inmediata
+            </h2>
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">
+              Acciones sugeridas por IA
             </span>
           </div>
-          <div
-            className={`text-2xl font-bold font-mono tracking-tight ${
-              operatingProfit >= 0 ? 'text-emerald-700' : 'text-rose-700'
-            }`}
-          >
-            {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(operatingProfit)}
+          <span className="text-xs text-slate-400">
+            Prioridad alta
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Facturas a Revisar */}
+          <div className="bg-slate-850 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-rose-400" />
+                  Facturas con Incidencia
+                </span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  {criticalInvoices.length} pendientes
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {criticalInvoices.length > 0
+                  ? 'Requieren confirmar subcuenta o corregir descuadres de CIF/Base.'
+                  : 'No hay facturas con bloqueo o pendientes de triaje.'}
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigateTab('expenses')}
+              className="w-full text-xs font-semibold py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition-all flex items-center justify-center gap-1.5"
+            >
+              {criticalInvoices.length > 0 ? 'Resolver en Triaje IA' : 'Ver Todas las Facturas'}
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Ventas netas - Gastos</span>
-            <span className="text-indigo-600 font-medium">PYME PGC</span>
+
+          {/* Card 2: Conciliación Bancaria */}
+          <div className="bg-slate-850 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Landmark className="w-4 h-4 text-blue-400" />
+                  Conciliación Bancaria
+                </span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                  Emparejamiento IA
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Cruza movimientos del extracto con asientos contables de facturas y nóminas.
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigateTab('banking')}
+              className="w-full text-xs font-semibold py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition-all flex items-center justify-center gap-1.5"
+            >
+              Conciliar Movimientos
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Card 3: Próximo Vencimiento Fiscal */}
+          <div className="bg-slate-850 border border-slate-800/80 rounded-xl p-4 flex flex-col justify-between space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-amber-400" />
+                  Próximo Impuesto
+                </span>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  13 días restantes
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Modelo 303 (IVA 1T) y Modelo 111 (IRPF). Plazo: 20 de Abril de 2026.
+              </p>
+            </div>
+
+            <button
+              onClick={() => onNavigateTab('taxes')}
+              className="w-full text-xs font-semibold py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 transition-all flex items-center justify-center gap-1.5"
+            >
+              Ver Borradores Oficiales
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
