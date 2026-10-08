@@ -80,8 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       (currentTab === 'integrations' ||
         currentTab === 'companies' ||
         currentTab === 'journal' ||
-        currentTab === 'chart-of-accounts' ||
-        currentTab === 'taxes')
+        currentTab === 'chart-of-accounts')
     ) {
       onSelectTab('dashboard');
     }

@@ -226,7 +226,7 @@ export const OnboardingGuideCard: React.FC<OnboardingGuideCardProps> = ({
             Sube un extracto Norma 43, Excel bancario o conecta con PSD2 para conciliar en 1 clic.
           </p>
           <button
-            onClick={() => onNavigateTab('bank')}
+            onClick={() => onNavigateTab('banking')}
             className="mt-3 text-xs font-semibold text-cyan-300 hover:text-white flex items-center gap-1 group"
           >
             <span>Ir a Conciliación Bancaria</span>

@@ -250,8 +250,8 @@ async def get_trial_balance(company_id: str, db: AsyncSession = Depends(get_db))
         items.append({
             "codigo": acc.codigo,
             "descripcion": acc.descripcion,
-            "nivel": acc.nivel,
-            "es_titulo": acc.es_titulo,
+            "nivel": len(acc.codigo) if acc.codigo else 1,
+            "es_titulo": False,
             "suma_debe": suma_debe,
             "suma_haber": suma_haber,
             "saldo_deudor": saldo_deudor,
