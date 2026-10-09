@@ -905,3 +905,204 @@ export async function fetchSystemHealth(): Promise<any> {
   return await res.json();
 }
 
+// -------------------------------------------------------------
+// INMOVILIZADO Y AMORTIZACIONES (FASE 6)
+// -------------------------------------------------------------
+export interface AssetDepreciationSchedule {
+  id: string;
+  asset_id: string;
+  company_id: string;
+  fiscal_year: number;
+  period_name: string;
+  start_date: string;
+  end_date: string;
+  depreciation_amount: number;
+  accumulated_depreciation: number;
+  net_book_value: number;
+  is_posted: boolean;
+  accounting_entry_number?: number;
+  posted_at?: string;
+}
+
+export interface Asset {
+  id: string;
+  company_id: string;
+  code: string;
+  name: string;
+  category: string;
+  acquisition_date: string;
+  acquisition_cost: number;
+  residual_value: number;
+  depreciation_start_date: string;
+  useful_life_years: number;
+  depreciation_method: string;
+  account_asset: string;
+  account_accumulated_depreciation: string;
+  account_depreciation_expense: string;
+  supplier_id?: string;
+  invoice_id?: string;
+  accumulated_depreciation: number;
+  net_book_value: number;
+  status: 'ACTIVO' | 'TOTALMENTE_AMORTIZADO' | 'BAJA' | 'VENDIDO';
+  disposal_date?: string;
+  disposal_amount?: number;
+  disposal_reason?: string;
+  notes?: string;
+  created_at: string;
+  schedules?: AssetDepreciationSchedule[];
+}
+
+export interface AssetSummaryMetrics {
+  total_assets_count: number;
+  total_acquisition_cost: number;
+  total_accumulated_depreciation: number;
+  total_net_book_value: number;
+  active_count: number;
+  fully_depreciated_count: number;
+  disposed_count: number;
+}
+
+export interface AssetCreatePayload {
+  code: string;
+  name: string;
+  category: string;
+  acquisition_date: string;
+  acquisition_cost: number;
+  residual_value?: number;
+  depreciation_start_date?: string;
+  useful_life_years: number;
+  depreciation_method?: string;
+  account_asset?: string;
+  account_accumulated_depreciation?: string;
+  account_depreciation_expense?: string;
+  supplier_id?: string;
+  invoice_id?: string;
+  notes?: string;
+}
+
+export async function fetchAssets(
+  companyId: string,
+  status?: string,
+  category?: string,
+  search?: string
+): Promise<Asset[]> {
+  const query = new URLSearchParams();
+  if (status && status !== 'ALL') query.append('status', status);
+  if (category && category !== 'ALL') query.append('category', category);
+  if (search) query.append('search', search);
+
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets?${query.toString()}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) return [];
+  return await res.json();
+}
+
+export async function fetchAssetSummary(companyId: string): Promise<AssetSummaryMetrics> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/summary`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    return {
+      total_assets_count: 0,
+      total_acquisition_cost: 0,
+      total_accumulated_depreciation: 0,
+      total_net_book_value: 0,
+      active_count: 0,
+      fully_depreciated_count: 0,
+      disposed_count: 0,
+    };
+  }
+  return await res.json();
+}
+
+export async function fetchAssetDetail(companyId: string, assetId: string): Promise<Asset> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/${assetId}`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('Error al cargar la ficha del activo');
+  return await res.json();
+}
+
+export async function createAsset(companyId: string, payload: AssetCreatePayload): Promise<Asset> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al dar de alta el activo');
+  }
+  return await res.json();
+}
+
+export async function updateAsset(companyId: string, assetId: string, payload: any): Promise<Asset> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/${assetId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al actualizar el activo');
+  }
+  return await res.json();
+}
+
+export async function postAssetDepreciation(
+  companyId: string,
+  assetId: string,
+  fiscalYear?: number,
+  postingDate?: string
+): Promise<any> {
+  const body: any = {};
+  if (fiscalYear) body.fiscal_year = fiscalYear;
+  if (postingDate) body.posting_date = postingDate;
+
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/${assetId}/depreciate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al contabilizar la dotación');
+  }
+  return await res.json();
+}
+
+export async function disposeAsset(
+  companyId: string,
+  assetId: string,
+  payload: {
+    disposal_date: string;
+    disposal_amount: number;
+    disposal_reason: string;
+    treasury_account?: string;
+  }
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/${assetId}/dispose`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al dar de baja o vender el activo');
+  }
+  return await res.json();
+}
+
+export async function deleteAsset(companyId: string, assetId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/assets/${assetId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al eliminar el activo');
+  }
+  return await res.json();
+}
+
+

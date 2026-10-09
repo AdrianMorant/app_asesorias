@@ -6,7 +6,8 @@ from app.models.account import Account
 from app.models.integration import CompanyIntegration, ExportBatch
 from app.models.contact import Contact
 from app.models.sales_invoice import SalesInvoice, SalesInvoiceLineItem, SalesInvoiceTaxBreakdown
-from app.models.user import User, UserRole, user_companies
+from app.models.user import User, UserRole, user_companies, RevokedToken
+from app.models.asset import Asset, AssetDepreciationSchedule, AssetCategory, DepreciationMethod, AssetStatus
 
 __all__ = [
     "Company",
@@ -24,5 +25,11 @@ __all__ = [
     "User",
     "UserRole",
     "user_companies",
+    "RevokedToken",
+    "Asset",
+    "AssetDepreciationSchedule",
+    "AssetCategory",
+    "DepreciationMethod",
+    "AssetStatus",
 ]
 

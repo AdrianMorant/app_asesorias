@@ -16,6 +16,8 @@ from fastapi import Depends, Header, HTTPException, Path, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import os
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import token_revocation_store
 from app.core.security_cookies import (
@@ -67,7 +69,7 @@ async def get_current_user_optional(
         payload = verify_session_token(token, expected_type="access")
         if payload:
             jti = payload.get("jti")
-            if jti and token_revocation_store.is_revoked(jti):
+            if jti and await token_revocation_store.is_revoked_persistent(jti, db=db):
                 return None
 
             user_id = payload.get("sub")
@@ -80,13 +82,15 @@ async def get_current_user_optional(
                 if user and user.is_active:
                     return user
 
-    # Modo de compatibilidad para tests automatizados y llamadas internas seguras
-    if x_dev_user_email:
+    # Modo de compatibilidad exclusivo para tests y desarrollo local (deshabilitado en producción)
+    is_prod = getattr(settings, "ENVIRONMENT", os.getenv("ENVIRONMENT", "development")).lower() in ("production", "prod", "staging")
+    if not is_prod and x_dev_user_email:
         res = await db.execute(select(User).where(User.email == x_dev_user_email.strip()))
         user = res.scalars().first()
         if user:
+            # Nunca sobreescribir el rol de un usuario existente con un header arbitrario
             return user
-        # Si se especificó rol en el header de desarrollo, construir entidad transitoria
+        # Si se especificó rol en el header de desarrollo para usuario no persistido en tests
         role = x_dev_user_role or UserRole.SUPERADMIN.value
         return User(
             id=f"dev-{x_dev_user_email}",

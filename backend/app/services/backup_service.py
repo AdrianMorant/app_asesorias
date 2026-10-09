@@ -163,6 +163,7 @@ def create_system_backup(
         "success": True,
         "backup_path": str(zip_path),
         "filename": zip_filename,
+        "backup_filename": zip_filename,
         "archive_sha256": archive_sha256,
         "size_bytes": archive_size_bytes,
         "files_count": files_added_count,

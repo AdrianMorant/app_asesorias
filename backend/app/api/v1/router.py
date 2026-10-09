@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     advisor,
     auth,
     operations,
+    assets,
 )
 
 api_router = APIRouter()
@@ -39,6 +40,7 @@ api_router.include_router(sales.router, prefix="/companies", tags=["Ventas y Fac
 api_router.include_router(taxes.router, prefix="/companies", tags=["Impuestos y Modelos Tributarios"])
 api_router.include_router(journal.router, prefix="/companies", tags=["Libro Diario, Mayor y Sumas y Saldos"])
 api_router.include_router(banking.router, prefix="/companies", tags=["Conciliación Bancaria Inteligente"])
+api_router.include_router(assets.router, prefix="/companies", tags=["Inmovilizado y Amortizaciones"])
 
 # Seguridad Avanzada y Autenticación de Dos Factores (TOTP RFC 6238)
 api_router.include_router(two_factor.router, prefix="/auth/2fa", tags=["Autenticación y Seguridad 2FA"])

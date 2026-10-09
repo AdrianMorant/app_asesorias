@@ -156,15 +156,25 @@ def create_refresh_token(
 
 
 def create_session_tokens(
-    subject: str,
-    extra_claims: Optional[Dict[str, Any]] = None
+    subject: Optional[str] = None,
+    extra_claims: Optional[Dict[str, Any]] = None,
+    user_id: Optional[str] = None,
+    role: Optional[str] = None,
+    company_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Genera el par completo de tokens de sesión: Access Token (15 min)
     y Refresh Token (7 días con jti).
     """
-    access_token = create_access_token(subject, extra_claims=extra_claims)
-    refresh_token, jti = create_refresh_token(subject, extra_claims=extra_claims)
+    sub = str(user_id or subject or "")
+    claims = dict(extra_claims or {})
+    if role:
+        claims["role"] = role
+    if company_id:
+        claims["company_id"] = company_id
+
+    access_token = create_access_token(sub, extra_claims=claims)
+    refresh_token, jti = create_refresh_token(sub, extra_claims=claims)
     
     return {
         "access_token": access_token,

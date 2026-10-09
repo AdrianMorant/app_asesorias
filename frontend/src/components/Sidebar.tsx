@@ -32,6 +32,7 @@ export type ActiveNavTab =
   | 'journal'
   | 'chart-of-accounts'
   | 'taxes'
+  | 'assets'
   | 'integrations'
   | 'companies'
   | 'advisor';
@@ -186,6 +187,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Table2,
           badge: null,
           advisorOnly: true,
+        },
+        {
+          id: 'assets' as ActiveNavTab,
+          label: 'Inmovilizado y Amort.',
+          icon: Briefcase,
+          badge: (
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
+              21X
+            </span>
+          ),
+          advisorOnly: false,
         },
       ],
     },

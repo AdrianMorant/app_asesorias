@@ -29,6 +29,7 @@ import { TaxDashboardView } from '@/components/TaxDashboardView';
 import { IntegrationsView } from '@/components/IntegrationsView';
 import { BankReconciliationView } from '@/components/BankReconciliationView';
 import { AdvisorPortalView } from '@/components/AdvisorPortalView';
+import { AssetsView } from '@/components/AssetsView';
 
 // Componentes de Ingesta IA y Split-screen
 import { UploadDropzone } from '@/components/UploadDropzone';
@@ -844,6 +845,11 @@ export default function AppSuitePage() {
                   onOpenAIAssistantWithQuery={handleOpenAIAssistantWithQuery}
                   mode={workspaceMode}
                 />
+              )}
+
+              {/* VISTA 7.5: INMOVILIZADO Y AMORTIZACIONES PGC (FASE 6) */}
+              {currentTab === 'assets' && (
+                <AssetsView company={selectedCompany} onNotify={notify} />
               )}
 
               {/* VISTA 8: CENTRO DE INTEGRACIONES Y ENLACE CONTABLE */}

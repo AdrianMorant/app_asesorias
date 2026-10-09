@@ -36,6 +36,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def init_db() -> None:
     """Crea las tablas en la base de datos si no existen y aplica migraciones ligeras."""
+    import app.models  # Asegura el registro de todas las entidades en Base.metadata
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         

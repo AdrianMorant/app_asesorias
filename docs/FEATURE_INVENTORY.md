@@ -25,6 +25,7 @@ Estado de revisión: **Fase 4 (Seguridad Empresarial & RBAC) y Fase 5 (Fiabilida
 | **12. Conciliación Bancaria y Tesorería** | 90% | 🟢 Operativo | Emparejamiento con facturas, deducción semántica (TGSS cuenta 476, suministros cuenta 628), generación de asientos de banco (572). |
 | **13. Modelos Tributarios (AEAT)** | 90% | 🟢 Operativo | Modelos 303, 111, 115, 347, 390 con cálculo determinista y auditoría de riesgo fiscal. |
 | **14. Auditoría Inmutable WORM** | 100% | 🟢 Operativo | Registro inmutable de seguridad en `security_audit.log` con encadenamiento SHA-256 (Art. 30/32 RGPD y Ley Antifraude 11/2021) y endpoint de diagnóstico `/api/v1/auth/audit/verify`. |
+| **15. Inmovilizado y Amortizaciones (Fase 6)** | 100% | 🟢 Operativo | **Fichas de Activo Fijo:** Grupos 20 y 21 PGC, cálculo plurianual con prorrateo por días exactos y cuadre decimal.<br>**Contabilización de Dotaciones:** Asientos automáticos 681/281 y 680/280 en partida doble con bloqueo por ejercicio cerrado e idempotencia.<br>**Bajas y Enajenaciones:** Asiento auditable con cuentas 281, 572, 21x y resultado del ejercicio (671 pérdidas / 771 beneficios).<br>**Seguridad Persistente:** Tabla `revoked_tokens` compartida entre workers, validación de producción con `assert_production_security_readiness()` y blindaje multi-tenant. |
 
 ---
 

@@ -53,13 +53,40 @@ Estado de revisión: **Fases 2 y 3 — Auditoría y Cierre de Incidencias**
 - **Solución técnica aplicada:** Se ajustó la prueba para hacer split directo por CRLF (`\r\n`) sin strip previo, preservando la longitud canónica de 96 caracteres.
 - **Resultado:** 🟢 **RESUELTO**.
 
+### INC-009 — Almacenamiento en memoria volátil de tokens revocados
+- **Gravedad:** Alta (P1) / Seguridad de Sesiones
+- **Módulo afectado:** `backend/app/core/security.py` y `backend/app/core/auth_deps.py`
+- **Comportamiento observado:** Al reiniciar el servidor FastAPI o al ejecutar múltiples instancias uvicorn/gunicorn, los tokens revocados en `/logout` o tras la rotación de `/refresh` volvían a ser válidos porque la lista negra residía únicamente en la memoria RAM del proceso.
+- **Solución técnica aplicada:** Se creó el modelo relacional `RevokedToken` en la base de datos con índice en `jti` y fecha de expiración. La clase `TokenRevocationStore` ahora realiza inserciones persistentes y consultas en BD (`is_revoked_persistent`) combinadas con una caché rápida en memoria.
+- **Resultado:** 🟢 **RESUELTO** (Verificado en `test_phase6_assets_and_security.py`).
+
+### INC-010 — Posible suplantación de privilegios en cabeceras de desarrollo
+- **Gravedad:** Alta (P1) / Control de Acceso RBAC
+- **Módulo afectado:** `backend/app/core/auth_deps.py`
+- **Comportamiento observado:** La cabecera `X-Dev-User-Role` utilizada para facilitar pruebas unitarias podía permitir a peticiones no autorizadas elevar privilegios si no se restringía estrictamente por entorno.
+- **Solución técnica aplicada:** Se blindó `auth_deps.py` de modo que en entornos de producción (`IS_PRODUCTION = True`) las cabeceras de depuración quedan completamente desactivadas. Además, para usuarios existentes en BD, el rol almacenado tiene prevalencia absoluta e inmutable.
+- **Resultado:** 🟢 **RESUELTO**.
+
+### INC-011 — Ausencia de bloqueo automático en arranque productivo con claves default
+- **Gravedad:** Crítica (P0) / Preparación para Producción
+- **Módulo afectado:** `backend/app/core/security.py`
+- **Comportamiento observado:** Un despliegue en producción con `SECRET_KEY` de desarrollo o sin HTTPS (`COOKIE_SECURE=false`) podía operar sin advertencias bloqueantes.
+- **Solución técnica aplicada:** Se implementó `assert_production_security_readiness()` que valida activamente que la clave no sea un valor por defecto o inseguro y que las cookies seguras sobre HTTPS estén exigidas, abortando la inicialización en caso de incumplimiento.
+- **Resultado:** 🟢 **RESUELTO** (Verificado en suite de pruebas).
+
 ---
 
-## 4. Limitaciones Conocidas y Alcance Actual (Sin Mocks)
+## 4. Inventario de Limitaciones, Requisitos y Riesgos Pendientes
 
-1. **Autenticación Multi-Usuario:**
-   - *Estado:* La plataforma registra eventos de seguridad en `security_audit.log` y almacena `created_by` en los asientos. Actualmente, si no se recibe un token JWT verificado, el sistema asume `created_by="sistema"` o `"usuario_local"`. No se simulan aprobaciones ficticias de usuarios que no hayan iniciado sesión.
-2. **Conectores API Cloud sin Credenciales:**
-   - *Estado:* El conector Holded API se muestra con estado `PENDING_CREDENTIALS` hasta que el usuario introduzca su token privado en el panel de integraciones.
-3. **Software de Escritorio en Red Local:**
-   - *Estado:* Los programas Wolters Kluwer A3, Contasol y Sage instalados en terminales Windows de despacho no disponen de API REST remota nativa. El intercambio se realiza mediante los ficheros normalizados de importación oficial (`SUENLACE.DAT` y CSV). El sistema no afirma que el software externo los haya cargado hasta que el usuario ejecute la importación en su programa de escritorio.
+1. **Aislamiento Multi-Tenant:**
+   - *Estado:* Totalmente verificado a nivel de endpoints y base de datos relacional. Los usuarios no asignados a una empresa reciben HTTP 403 Forbidden.
+2. **Auditoría WORM vs. Almacenamiento Inmutable en la Nube:**
+   - *Estado:* La cadena criptográfica SHA-256 en `security_audit.log` detecta con certeza matemática cualquier alteración, adición o borrado retroactivo de registros. Sin embargo, en el sistema de archivos local, un usuario con permisos de administrador del sistema operativo podría técnicamente borrar el archivo completo. Para un entorno enterprise regulado se recomienda montar el volumen en un bucket con política de retención inmutable (ej. AWS S3 Object Lock o Azure Immutable Blob).
+3. **Nivel de Validación de Integraciones ERP (A3, Contasol, Sage):**
+   - *Nivel 1 (Archivo generado correctamente):* ✅ Sí, verificado en pruebas con codificación CP1252/Latin-1 y longitud canónica.
+   - *Nivel 2 (Validado contra especificación oficial):* ✅ Sí, contra la especificación oficial de Wolters Kluwer (SUENLACE 96 car.) y plantillas de DELSOL y Sage.
+   - *Nivel 3 (Importado en software real en vivo):* ⚠️ Pendiente de validación manual en los puestos de trabajo finales del despacho por parte del contable usuario.
+   - *Nivel 4 (Integración automática vía API cloud confirmada):* Requiere credenciales de producción del cliente final.
+4. **Despliegue a Producción:**
+   - Se requiere configurar variables de entorno reales (`SECRET_KEY` aleatoria de 64 caracteres, `ENVIRONMENT=production`, `COOKIE_SECURE=true`, certificado SSL/TLS con reverse proxy NGINX/Caddy). No se debe desplegar a producción sin autorización previa expresa.
+

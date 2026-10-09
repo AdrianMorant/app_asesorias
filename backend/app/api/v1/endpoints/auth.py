@@ -337,7 +337,13 @@ async def logout_user(
             jti = payload.get("jti")
             exp = payload.get("exp", time.time() + 3600)
             if jti:
-                token_revocation_store.revoke(jti, exp)
+                await token_revocation_store.revoke_persistent(
+                    jti=jti,
+                    expires_at=exp,
+                    db=db,
+                    user_id=user_id,
+                    token_type="access",
+                )
 
     # 2. Borrar cookies HttpOnly
     clear_auth_cookies(response)
@@ -381,15 +387,21 @@ async def refresh_session(
         )
 
     jti = decoded.get("jti")
-    if jti and token_revocation_store.is_revoked(jti):
+    if jti and await token_revocation_store.is_revoked_persistent(jti, db=db):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="El token de refresco ya ha sido revocado.",
         )
 
-    # Rotar: revocar el refresh token anterior
+    # Rotar: revocar el refresh token anterior de forma persistente
     if jti:
-        token_revocation_store.revoke(jti, decoded.get("exp", time.time() + 86400 * 7))
+        await token_revocation_store.revoke_persistent(
+            jti=jti,
+            expires_at=decoded.get("exp", time.time() + 86400 * 7),
+            db=db,
+            user_id=decoded.get("sub"),
+            token_type="refresh",
+        )
 
     user_id = decoded["sub"]
     res = await db.execute(select(User).where(User.id == user_id))

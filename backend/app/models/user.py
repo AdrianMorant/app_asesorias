@@ -66,3 +66,19 @@ class User(Base):
         back_populates="users",
         lazy="selectin",
     )
+
+
+class RevokedToken(Base):
+    """Registro persistente de tokens revocados (Blacklist / Token Revocation List).
+
+    Garantiza que la invalidación de sesiones tras logout, rotación o recuperación de contraseña
+    persista ante reinicios del servidor y se comparta entre múltiples workers o réplicas en SQLite y PostgreSQL.
+    """
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String(255), primary_key=True, index=True)
+    token_type = Column(String(50), default="access", nullable=False)
+    user_id = Column(String(36), nullable=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    revoked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
