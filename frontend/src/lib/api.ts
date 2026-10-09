@@ -487,6 +487,9 @@ export async function generateExportBatch(
   data: {
     software_type: SoftwareType;
     only_pending: boolean;
+    force_reexport?: boolean;
+    reexport_reason?: string;
+    fiscal_year?: number;
     invoice_ids?: string[];
     config_overrides?: Record<string, any>;
   }
@@ -654,13 +657,31 @@ export async function fetchTaxSummary(
 // -------------------------------------------------------------
 export async function fetchJournalEntries(
   companyId: string,
-  params?: { fromDate?: string; toDate?: string; search?: string }
+  params?: {
+    fromDate?: string;
+    toDate?: string;
+    search?: string;
+    entryNumber?: number;
+    subcuenta?: string;
+    status?: string;
+    exported?: boolean;
+    fiscalYear?: number;
+    page?: number;
+    pageSize?: number;
+  }
 ): Promise<JournalResponse> {
   try {
     const query = new URLSearchParams();
     if (params?.fromDate) query.append('from_date', params.fromDate);
     if (params?.toDate) query.append('to_date', params.toDate);
     if (params?.search) query.append('search', params.search);
+    if (params?.entryNumber !== undefined && params?.entryNumber !== null) query.append('entry_number', String(params.entryNumber));
+    if (params?.subcuenta) query.append('subcuenta', params.subcuenta);
+    if (params?.status && params.status !== 'ALL') query.append('status', params.status);
+    if (params?.exported !== undefined && params?.exported !== null) query.append('exported', String(params.exported));
+    if (params?.fiscalYear) query.append('fiscal_year', String(params.fiscalYear));
+    if (params?.page) query.append('page', String(params.page));
+    if (params?.pageSize) query.append('page_size', String(params.pageSize));
 
     const res = await fetch(`${API_BASE}/companies/${companyId}/journal?${query.toString()}`, {
       cache: 'no-store',
@@ -672,14 +693,64 @@ export async function fetchJournalEntries(
   }
 }
 
+export async function reverseJournalEntry(
+  companyId: string,
+  entryNumber: number,
+  data: { reason: string; reversal_date?: string }
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/journal/${entryNumber}/reverse`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al revertir el asiento');
+  }
+  return await res.json();
+}
+
+export async function closeFiscalYear(
+  companyId: string,
+  data: { year: number; closing_date?: string }
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/journal/close-fiscal-year`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al regularizar y cerrar el ejercicio contable');
+  }
+  return await res.json();
+}
+
+export async function reopenFiscalYear(
+  companyId: string,
+  data: { cif_confirmation: string; new_closing_date?: string }
+): Promise<any> {
+  const res = await fetch(`${API_BASE}/companies/${companyId}/journal/reopen-fiscal-year`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al reabrir el ejercicio contable');
+  }
+  return await res.json();
+}
+
 export async function fetchAccountLedger(
   companyId: string,
   subcuenta: string,
-  params?: { fromDate?: string; toDate?: string }
+  params?: { fromDate?: string; toDate?: string; fiscalYear?: number }
 ): Promise<LedgerResponse> {
   const query = new URLSearchParams();
   if (params?.fromDate) query.append('from_date', params.fromDate);
   if (params?.toDate) query.append('to_date', params.toDate);
+  if (params?.fiscalYear) query.append('fiscal_year', String(params.fiscalYear));
 
   const res = await fetch(`${API_BASE}/companies/${companyId}/ledger/${subcuenta}?${query.toString()}`, {
     cache: 'no-store',
@@ -691,8 +762,16 @@ export async function fetchAccountLedger(
   return await res.json();
 }
 
-export async function fetchTrialBalance(companyId: string): Promise<TrialBalanceResponse> {
-  const res = await fetch(`${API_BASE}/companies/${companyId}/trial-balance`, {
+export async function fetchTrialBalance(
+  companyId: string,
+  params?: { fromDate?: string; toDate?: string; fiscalYear?: number }
+): Promise<TrialBalanceResponse> {
+  const query = new URLSearchParams();
+  if (params?.fromDate) query.append('from_date', params.fromDate);
+  if (params?.toDate) query.append('to_date', params.toDate);
+  if (params?.fiscalYear) query.append('fiscal_year', String(params.fiscalYear));
+
+  const res = await fetch(`${API_BASE}/companies/${companyId}/trial-balance?${query.toString()}`, {
     cache: 'no-store',
   });
   if (!res.ok) {
@@ -700,6 +779,12 @@ export async function fetchTrialBalance(companyId: string): Promise<TrialBalance
     throw new Error(err.detail || 'Error al calcular el balance de sumas y saldos');
   }
   return await res.json();
+}
+
+export function getTrialBalanceCsvUrl(companyId: string, fiscalYear?: number): string {
+  const query = new URLSearchParams();
+  if (fiscalYear) query.append('fiscal_year', String(fiscalYear));
+  return `${API_BASE}/companies/${companyId}/trial-balance/export-csv?${query.toString()}`;
 }
 
 // -------------------------------------------------------------

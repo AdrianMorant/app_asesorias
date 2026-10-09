@@ -219,6 +219,8 @@ export interface ExportBatch {
   total_haber: number;
   file_name?: string;
   file_path?: string;
+  data_fingerprint?: string | null;
+  fiscal_year?: number | null;
   status: string;
   log_notes?: string;
   created_at: string;
@@ -411,6 +413,14 @@ export interface JournalEntryGroup {
   entry_number: number;
   fecha: string;
   documento?: string;
+  document_id?: string | null;
+  document_type?: 'expense' | 'sales' | 'manual';
+  document_file_name?: string | null;
+  status?: string;
+  is_reversal?: boolean;
+  reversal_of_entry_number?: number | null;
+  created_by?: string;
+  is_closed_period?: boolean;
   exported_to_erp?: boolean;
   export_batch_id?: string | null;
   total_debe: number;
@@ -424,6 +434,7 @@ export interface JournalEntryGroup {
     haber: number;
     documento?: string;
     exported_to_erp?: boolean;
+    status?: string;
   }[];
 }
 
@@ -431,6 +442,13 @@ export interface JournalResponse {
   company_id: string;
   total_asientos: number;
   total_apuntes: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  total_general_debe?: number;
+  total_general_haber?: number;
+  cuadre_general?: boolean;
+  fecha_cierre_contable?: string | null;
   asientos: JournalEntryGroup[];
 }
 
@@ -444,26 +462,40 @@ export interface LedgerMovement {
   haber: number;
   saldo_progresivo: number;
   signo: 'D' | 'H' | '0';
+  status?: string;
+  is_reversal?: boolean;
 }
 
 export interface LedgerResponse {
   company_id: string;
   subcuenta: string;
   descripcion: string;
+  naturaleza_esperada?: string;
   debe_inicial: number;
   haber_inicial: number;
   total_debe: number;
   total_haber: number;
   saldo_final: number;
   tipo_saldo: 'DEUDOR' | 'ACREEDOR' | 'CERO';
+  movimientos_count?: number;
   movimientos: LedgerMovement[];
+}
+
+export interface TrialBalanceGroupSummary {
+  grupo: string;
+  nombre: string;
+  suma_debe: number;
+  suma_haber: number;
+  saldo_deudor: number;
+  saldo_acreedor: number;
+  cuentas_activas: number;
 }
 
 export interface TrialBalanceItem {
   codigo: string;
   descripcion: string;
+  grupo?: string;
   nivel: number;
-  es_titulo: boolean;
   suma_debe: number;
   suma_haber: number;
   saldo_deudor: number;
@@ -472,7 +504,9 @@ export interface TrialBalanceItem {
 
 export interface TrialBalanceResponse {
   company_id: string;
+  items_count?: number;
   items: TrialBalanceItem[];
+  grupos_resumen?: TrialBalanceGroupSummary[];
   totales: {
     suma_debe: number;
     suma_haber: number;

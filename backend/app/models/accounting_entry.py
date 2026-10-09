@@ -34,6 +34,12 @@ class AccountingEntryLine(Base):
     exported_to_erp = Column(Boolean, default=False, nullable=False)
     export_batch_id = Column(String(36), ForeignKey("export_batches.id", ondelete="SET NULL"), nullable=True, index=True)
 
+    # Ciclo de vida y auditoría contable
+    status = Column(String(30), default="contabilizado", nullable=False)  # "borrador", "pendiente_aprobacion", "contabilizado", "revertido"
+    is_reversal = Column(Boolean, default=False, nullable=False)          # Indica si este apunte es una reversión / anulación
+    reversal_of_entry_number = Column(Integer, nullable=True)             # Asiento original revertido
+    created_by = Column(String(100), default="sistema", nullable=False)
+
     # Relaciones
     invoice = relationship("Invoice", back_populates="accounting_entries")
     sales_invoice = relationship("SalesInvoice", back_populates="accounting_entries")

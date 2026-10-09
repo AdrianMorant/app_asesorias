@@ -52,7 +52,9 @@ class ExportBatch(Base):
     
     file_name = Column(String(255), nullable=True)                 # Ej: SUENLACE_20261007_01.DAT
     file_path = Column(String(500), nullable=True)                 # Ruta guardada en storage/
-    status = Column(String(30), default="COMPLETED", nullable=False) # COMPLETED, FAILED, SYNCED
+    data_fingerprint = Column(String(64), nullable=True)           # Hash SHA-256 para prevenir duplicados accidentales
+    fiscal_year = Column(Integer, nullable=True)                   # Ejercicio del lote
+    status = Column(String(30), default="EXPORTED_FILE", nullable=False) # EXPORTED_FILE, PENDING_CREDENTIALS, SYNCED_API, FAILED
     log_notes = Column(Text, nullable=True)
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

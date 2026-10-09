@@ -49,6 +49,11 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
   // Software contable activo seleccionado para la empresa
   const [selectedSoftware, setSelectedSoftware] = useState<SoftwareType>('A3');
   const [onlyPending, setOnlyPending] = useState<boolean>(true);
+  const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
+
+  // Modal para forzar reexportación justificada ante huella duplicada
+  const [showForceModal, setShowForceModal] = useState<boolean>(false);
+  const [reexportReason, setReexportReason] = useState<string>('');
 
   // Estados de configuración por conector
   const [a3Config, setA3Config] = useState({
@@ -135,8 +140,15 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
     }
   };
 
+  // Filtrar facturas por ejercicio si corresponde
+  const filteredByYearInvoices = invoices.filter((inv) => {
+    if (!inv.issue_date) return true;
+    const invYear = new Date(inv.issue_date).getFullYear();
+    return invYear === fiscalYear;
+  });
+
   // Facturas y asientos candidatos para exportar
-  const approvedInvoices = invoices.filter((inv) => inv.is_processed);
+  const approvedInvoices = filteredByYearInvoices.filter((inv) => inv.is_processed);
   const pendingInvoices = approvedInvoices.filter((inv) => !inv.exported_to_erp);
   const targetInvoices = onlyPending ? pendingInvoices : approvedInvoices;
 
@@ -144,9 +156,9 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
   const totalBatchAmount = targetInvoices.reduce((acc, inv) => acc + inv.total_amount, 0);
 
   // Ejecutar generación del lote
-  const handleGenerateExport = async () => {
+  const handleGenerateExport = async (force: boolean = false) => {
     if (targetInvoices.length === 0) {
-      onNotify('info', 'No hay facturas aprobadas pendientes para exportar en este momento.');
+      onNotify('info', `No hay facturas aprobadas pendientes para exportar en el ejercicio ${fiscalYear}.`);
       return;
     }
 
@@ -156,6 +168,11 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
         `Bloqueo de seguridad: Hay ${redCountInBatch} factura(s) en Semáforo Rojo dentro del lote. Corrígelas antes de exportar.`,
         'Bloqueo Contable'
       );
+      return;
+    }
+
+    if (force && (!reexportReason || reexportReason.trim().length < 5)) {
+      onNotify('error', 'Debes indicar un motivo de reexportación justificado de al menos 5 caracteres.');
       return;
     }
 
@@ -170,7 +187,10 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
       const newBatch = await generateExportBatch(company.id, {
         software_type: selectedSoftware,
         only_pending: onlyPending,
+        fiscal_year: fiscalYear,
         config_overrides: overrides,
+        force_reexport: force,
+        reexport_reason: force ? reexportReason.trim() : undefined,
       });
 
       onNotify(
@@ -184,10 +204,16 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
         window.open(getBatchDownloadUrl(newBatch.id), '_blank');
       }
 
+      setShowForceModal(false);
+      setReexportReason('');
       await loadData();
       if (onRefreshData) onRefreshData();
     } catch (err: any) {
-      onNotify('error', err.message || 'Error al generar el lote contable', 'Fallo de Exportación');
+      const msg = err.message || 'Error al generar el lote contable';
+      if (msg.includes('ya fue exportado') || msg.includes('fingerprint') || msg.includes('400')) {
+        setShowForceModal(true);
+      }
+      onNotify('error', msg, 'Fallo de Exportación');
     } finally {
       setExporting(false);
     }
@@ -499,10 +525,25 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                 <Cpu className="w-4 h-4 text-emerald-600" />
                 Generación y Disparo del Lote Contable
               </h2>
-              <span className="text-xs text-slate-500 font-medium">
-                Destino:{' '}
-                <strong className="text-indigo-600">{selectedSoftware}</strong>
-              </span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-500">Ejercicio:</span>
+                  <select
+                    value={fiscalYear}
+                    onChange={(e) => setFiscalYear(Number(e.target.value))}
+                    className="border border-slate-200 rounded-lg px-2 py-1 bg-white font-bold text-indigo-700 outline-none"
+                  >
+                    {[2024, 2025, 2026, 2027].map((y) => (
+                      <option key={y} value={y}>
+                        {y}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <span className="text-xs text-slate-500 font-medium">
+                  Destino: <strong className="text-indigo-600">{selectedSoftware}</strong>
+                </span>
+              </div>
             </div>
 
             {/* Selector de ámbito */}
@@ -517,7 +558,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-bold text-slate-800">
-                    Solo Pendientes de Exportar
+                    Solo Pendientes de Exportar ({fiscalYear})
                   </span>
                   <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-indigo-100 text-indigo-700">
                     {pendingInvoices.length} docs
@@ -525,7 +566,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-500">
                   Recomendado. Excluye automáticamente documentos y asientos ya exportados para evitar
-                  duplicidades.
+                  duplicidades contables.
                 </p>
               </div>
 
@@ -539,15 +580,15 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-bold text-slate-800">
-                    Exportación Completa / Histórica
+                    Exportación Completa / Histórica ({fiscalYear})
                   </span>
                   <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700">
                     {approvedInvoices.length} docs
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Exporta todas las facturas aprobadas de la empresa, incluidas las ya sincronizadas
-                  anteriormente.
+                  Incluye todas las facturas aprobadas del ejercicio {fiscalYear}, incluso si ya fueron
+                  exportadas (control de huella SHA-256 activo).
                 </p>
               </div>
             </div>
@@ -555,7 +596,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
             {/* Resumen numérico del lote */}
             <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 mb-4">
               <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                Resumen del Lote a Exportar
+                Resumen del Lote a Exportar — Ejercicio {fiscalYear}
               </div>
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="bg-white p-2.5 rounded-lg border border-slate-200">
@@ -607,12 +648,12 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                   Listo para generar y registrar en auditoría
                 </span>
               ) : (
-                <span className="text-slate-400">No hay asientos pendientes para exportar.</span>
+                <span className="text-slate-400">No hay asientos pendientes para exportar en {fiscalYear}.</span>
               )}
             </div>
 
             <button
-              onClick={handleGenerateExport}
+              onClick={() => handleGenerateExport(false)}
               disabled={exporting || targetInvoices.length === 0 || redCountInBatch > 0}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-xs font-bold text-white shadow-sm transition-all ${
                 exporting || targetInvoices.length === 0 || redCountInBatch > 0
@@ -636,6 +677,65 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
         </div>
       </div>
 
+      {/* Modal para Forzar Reexportación Justificada */}
+      {showForceModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-lg w-full p-6 animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3 text-amber-600 mb-3">
+              <span className="p-2 bg-amber-50 rounded-xl">
+                <AlertTriangle className="w-6 h-6" />
+              </span>
+              <h3 className="text-base font-bold text-slate-900">
+                Lote con Huella Digital Preexistente
+              </h3>
+            </div>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              El sistema ha detectado que los documentos seleccionados tienen una huella digital SHA-256
+              idéntica a un lote generado previamente. Para evitar duplicidades contables en el software
+              de destino, debes registrar un motivo formal y auditable para reexportar.
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Motivo justificado de la reexportación:
+              </label>
+              <textarea
+                value={reexportReason}
+                onChange={(e) => setReexportReason(e.target.value)}
+                placeholder="Ej: Pérdida del fichero plano por fallo en el disco del despacho / Reintento por cambio de ejercicio en A3"
+                rows={3}
+                className="w-full text-xs p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+              />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Mínimo 5 caracteres. Se archivará en la pista de auditoría.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForceModal(false);
+                  setReexportReason('');
+                }}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleGenerateExport(true)}
+                disabled={exporting || reexportReason.trim().length < 5}
+                className="px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 rounded-lg shadow-sm transition-all flex items-center gap-2"
+              >
+                {exporting && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                Confirmar Reexportación Justificada
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Historial de Exportaciones y Sincronizaciones */}
       <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="p-4 border-b border-slate-200/80 flex items-center justify-between">
@@ -645,7 +745,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
               Historial de Exportaciones y Lotes Generados
             </h2>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Trazabilidad completa de ficheros emitidos para auditoría fiscal.
+              Trazabilidad completa con huella criptográfica SHA-256 para auditoría fiscal e inmutabilidad.
             </p>
           </div>
           <button
@@ -672,7 +772,8 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                   <th className="py-2.5 px-4 text-center">Apuntes</th>
                   <th className="py-2.5 px-4 text-center">Facturas</th>
                   <th className="py-2.5 px-4 text-right">Total Debe / Haber</th>
-                  <th className="py-2.5 px-4">Estado</th>
+                  <th className="py-2.5 px-4">Huella SHA-256</th>
+                  <th className="py-2.5 px-4">Estado Real</th>
                   <th className="py-2.5 px-4 text-right">Acción</th>
                 </tr>
               </thead>
@@ -702,19 +803,44 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                         b.total_debe
                       )}
                     </td>
+                    <td className="py-3 px-4 font-mono text-[10px] text-slate-500">
+                      {b.data_fingerprint ? (
+                        <span
+                          title={b.data_fingerprint}
+                          className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-600"
+                        >
+                          {b.data_fingerprint.slice(0, 10)}...
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">-</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                          b.status === 'COMPLETED'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : b.status === 'SYNCED'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : 'bg-amber-50 text-amber-700'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-3 h-3" />
-                        {b.status}
-                      </span>
+                      {b.status === 'EXPORTED_FILE' || b.status === 'COMPLETED' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Fichero Generado
+                        </span>
+                      ) : b.status === 'SYNCED_API' || b.status === 'SYNCED' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                          <CheckCircle2 className="w-3 h-3" />
+                          API Sincronizada
+                        </span>
+                      ) : b.status === 'PENDING_CREDENTIALS' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <Clock className="w-3 h-3" />
+                          Sin Credenciales API
+                        </span>
+                      ) : b.status === 'FAILED' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <AlertTriangle className="w-3 h-3" />
+                          Fallo
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-700 border border-slate-200">
+                          {b.status}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       {b.file_name ? (
@@ -728,7 +854,7 @@ export const IntegrationsView: React.FC<IntegrationsViewProps> = ({
                           Descargar ({b.file_name})
                         </a>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">Sync API</span>
+                        <span className="text-slate-400 text-[11px]">API Conector</span>
                       )}
                     </td>
                   </tr>

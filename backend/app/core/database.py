@@ -193,6 +193,81 @@ async def init_db() -> None:
             await conn.execute(text("ALTER TABLE accounting_entry_lines ADD COLUMN company_id VARCHAR(36)"))
         except Exception:
             pass
+        try:
+            await conn.execute(text("ALTER TABLE accounting_entry_lines ADD COLUMN status VARCHAR(30) DEFAULT 'contabilizado'"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE accounting_entry_lines ADD COLUMN is_reversal BOOLEAN DEFAULT 0"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE accounting_entry_lines ADD COLUMN reversal_of_entry_number INTEGER"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE accounting_entry_lines ADD COLUMN created_by VARCHAR(100) DEFAULT 'sistema'"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE export_batches ADD COLUMN data_fingerprint VARCHAR(64)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE export_batches ADD COLUMN fiscal_year INTEGER"))
+        except Exception:
+            pass
+
+        # Migración de integridad: Permitir invoice_id NULLABLE en accounting_entry_lines para asientos generales
+        try:
+            pragma_res = await conn.execute(text("PRAGMA table_info(accounting_entry_lines)"))
+            cols = pragma_res.fetchall()
+            # cols: (cid, name, type, notnull, dflt_value, pk)
+            invoice_id_col = next((c for c in cols if c[1] == "invoice_id"), None)
+            if invoice_id_col and invoice_id_col[3] == 1:  # notnull == 1
+                await conn.execute(text("""
+                    CREATE TABLE accounting_entry_lines_dg_tmp (
+                        id VARCHAR(36) NOT NULL PRIMARY KEY,
+                        company_id VARCHAR(36),
+                        invoice_id VARCHAR(36),
+                        sales_invoice_id VARCHAR(36),
+                        entry_number INTEGER NOT NULL DEFAULT 1,
+                        fecha DATE NOT NULL,
+                        subcuenta VARCHAR(20) NOT NULL,
+                        concepto VARCHAR(255) NOT NULL,
+                        debe FLOAT NOT NULL DEFAULT 0.0,
+                        haber FLOAT NOT NULL DEFAULT 0.0,
+                        documento VARCHAR(100),
+                        exported_to_erp BOOLEAN DEFAULT 0,
+                        export_batch_id VARCHAR(36),
+                        status VARCHAR(30) DEFAULT 'contabilizado',
+                        is_reversal BOOLEAN DEFAULT 0,
+                        reversal_of_entry_number INTEGER,
+                        created_by VARCHAR(100) DEFAULT 'sistema',
+                        FOREIGN KEY(company_id) REFERENCES companies (id) ON DELETE CASCADE,
+                        FOREIGN KEY(invoice_id) REFERENCES invoices (id) ON DELETE CASCADE,
+                        FOREIGN KEY(sales_invoice_id) REFERENCES sales_invoices (id) ON DELETE CASCADE,
+                        FOREIGN KEY(export_batch_id) REFERENCES export_batches (id) ON DELETE SET NULL
+                    )
+                """))
+                await conn.execute(text("""
+                    INSERT INTO accounting_entry_lines_dg_tmp (
+                        id, company_id, invoice_id, sales_invoice_id, entry_number, fecha,
+                        subcuenta, concepto, debe, haber, documento, exported_to_erp,
+                        export_batch_id, status, is_reversal, reversal_of_entry_number, created_by
+                    )
+                    SELECT 
+                        id, company_id, invoice_id, sales_invoice_id, entry_number, fecha,
+                        subcuenta, concepto, debe, haber, documento, exported_to_erp,
+                        export_batch_id, status, is_reversal, reversal_of_entry_number, created_by
+                    FROM accounting_entry_lines
+                """))
+                await conn.execute(text("DROP TABLE accounting_entry_lines"))
+                await conn.execute(text("ALTER TABLE accounting_entry_lines_dg_tmp RENAME TO accounting_entry_lines"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_entry_lines_subcuenta ON accounting_entry_lines (subcuenta)"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_accounting_entry_lines_company_id ON accounting_entry_lines (company_id)"))
+        except Exception:
+            pass
 
     # Precargar el Plan General Contable PYME en empresas existentes
     async with AsyncSessionLocal() as session:

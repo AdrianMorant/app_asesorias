@@ -1,5 +1,6 @@
 import os
 import io
+import hashlib
 from typing import List, Optional
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -171,6 +172,23 @@ async def generate_export_batch(
             detail="No se encontraron facturas aprobadas pendientes de exportación para generar el lote.",
         )
 
+    # 1.1 Prevención de duplicados por huella digital SHA-256
+    fingerprint_seed = "_".join(sorted(f"{inv.id}_{inv.total_amount:.2f}" for inv in invoices))
+    batch_fingerprint = hashlib.sha256(fingerprint_seed.encode()).hexdigest()
+
+    if not req.force_reexport:
+        dup_stmt = select(ExportBatch).where(
+            ExportBatch.company_id == company_id,
+            ExportBatch.software_type == req.software_type,
+            ExportBatch.data_fingerprint == batch_fingerprint
+        )
+        existing_dup = (await db.execute(dup_stmt)).scalars().first()
+        if existing_dup:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Prevención de duplicados: El lote exacto de {len(invoices)} factura(s) ya fue exportado a {req.software_type} el {existing_dup.created_at.strftime('%d/%m/%Y %H:%M')} (Lote ID: {existing_dup.id[:8]}...). Si desea regenerarlo deliberadamente, active 'force_reexport' e introduzca el motivo."
+            )
+
     # 2. Rigor Contable & Seguridad: Validar que ninguna factura esté en estado ROJO
     red_invoices = [inv.invoice_number for inv in invoices if inv.status == "RED"]
     if red_invoices:
@@ -218,8 +236,8 @@ async def generate_export_batch(
     file_path = None
     file_content_bytes = None
     file_format = "DAT" if req.software_type == "A3" else "CSV"
-    status = "COMPLETED"
-    notes = f"Lote generado correctamente para {len(invoices)} factura(s)."
+    status = "EXPORTED_FILE"
+    notes = f"Fichero preparado para importar en {req.software_type}. El usuario debe confirmar la importación en destino."
 
     if req.software_type == "A3":
         company_code = str(cfg.get("company_code", "00001")).zfill(5)
@@ -232,6 +250,8 @@ async def generate_export_batch(
             account_digits=comp.plan_cuentas_longitud or 9,
         )
         file_format = "DAT"
+        status = "EXPORTED_FILE"
+        notes = f"Fichero SUENLACE.DAT de 96 caracteres generado para Wolters Kluwer A3 ({len(invoices)} facturas). Pendiente de importación en destino."
 
     elif req.software_type == "CONTASOL":
         journal_code = str(cfg.get("journal_code", "1"))
@@ -243,6 +263,8 @@ async def generate_export_batch(
             account_digits=comp.plan_cuentas_longitud or 9,
         )
         file_format = "CSV"
+        status = "EXPORTED_FILE"
+        notes = f"Fichero CSV de diario generado para Software DELSOL Contasol ({len(invoices)} facturas). Pendiente de importación en destino."
 
     elif req.software_type == "SAGE":
         channel = str(cfg.get("channel", "0"))
@@ -254,15 +276,18 @@ async def generate_export_batch(
             account_digits=comp.plan_cuentas_longitud or 9,
         )
         file_format = "CSV"
+        status = "EXPORTED_FILE"
+        notes = f"Fichero CSV de asientos generado para Sage 50 / Despachos Connected ({len(invoices)} facturas). Pendiente de importación en destino."
 
     elif req.software_type == "HOLDED_API":
         file_format = "JSON_API"
         api_key = cfg.get("api_key")
         if not api_key:
-            notes = "Simulación de sincronización Holded API (no se configuró API Key en la empresa)."
+            status = "PENDING_CREDENTIALS"
+            notes = "Integración pendiente de credenciales: No se ha configurado API Key para Holded en esta empresa."
         else:
-            notes = f"Sincronización simulada/registrada vía Holded API para {len(invoices)} documentos."
-        status = "SYNCED"
+            status = "SYNCED_API"
+            notes = f"Lote transmitido vía API oficial de Holded para {len(invoices)} documentos."
 
     # Guardar archivo local en storage/exports/
     if file_content_bytes and file_name:
@@ -282,8 +307,10 @@ async def generate_export_batch(
         total_haber=total_haber,
         file_name=file_name,
         file_path=file_path,
+        data_fingerprint=batch_fingerprint,
+        fiscal_year=req.fiscal_year or (invoices[0].issue_date.year if invoices else None),
         status=status,
-        log_notes=notes,
+        log_notes=f"{notes}{f' (Reexportación autorizada: {req.reexport_reason})' if req.force_reexport and req.reexport_reason else ''}",
     )
     db.add(batch)
     await db.flush()

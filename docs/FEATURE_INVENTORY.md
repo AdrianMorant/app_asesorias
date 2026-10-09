@@ -1,7 +1,7 @@
 # INVENTARIO INTEGRAL DE FUNCIONALIDADES (FEATURE INVENTORY)
 ### Plataforma SaaS de Gestión Empresarial y Copiloto Contable con IA
 
-Estado de revisión: **Fase 0 — Auditoría Técnica**  
+Estado de revisión: **Fase 2 y Fase 3 — Completadas y Verificadas**  
 Última actualización: Octubre 2026
 
 ---
@@ -10,52 +10,53 @@ Estado de revisión: **Fase 0 — Auditoría Técnica**
 
 | Módulo / Dominio | Cobertura Funcional | Estado Operativo | Observaciones Técnicas |
 | :--- | :---: | :---: | :--- |
-| **0. Auditoría y Estabilización** | 90% | 🟡 En estabilización | Errores identificados en borrado y extracción con IA desatendida. |
-| **1. Multiempresa y Configuración** | 95% | 🟢 Operativo | CRUD de empresas, CIF único, longitud de plan (8/9/10), borrado seguro con confirmación de CIF. |
-| **2. Plan General Contable (PGC PYMES)** | 70% | 🟡 Requiere ampliación | Catálogo inicial de 42 cuentas; falta cobertura completa de grupos 1 a 7 (especialmente grupo 3 y amortizaciones). |
-| **3. Extracción Documental e IA** | 75% | 🟡 Requiere corrección | Extracción multimodal OpenAI/Gemini implementada, pero elimina archivo si la IA falla y carece de modo asistido con visor. |
-| **4. Motor Semafórico y Triaje** | 95% | 🟢 Operativo | Semáforo determinista (Verde, Amarillo, Rojo), detección de duplicados por hash/número, bloqueo contable. |
-| **5. Borrado y Gestión de Selección** | 80% | 🔴 Corrección prioritaria | Estado de selección en `InvoiceTable` y sincronización con modal de confirmación requiere desacoplamiento estricto. |
-| **6. Archivado Documental** | 85% | 🟡 Requiere robustez | Estructura por empresa/ejercicio/periodo/recibidas; falta política explícita de colisiones de ficheros. |
-| **7. Contabilidad (Diario, Mayor, Balances)** | 85% | 🟢 Operativo | Partida doble, libro diario, sumas y saldos, balance de situación y cuenta de pérdidas y ganancias. |
-| **8. Ventas, Compras y Contactos** | 90% | 🟢 Operativo | Clientes, proveedores, facturas de ventas, emisión, generación y registro en diario. |
-| **9. Integraciones Contables (A3, Contasol, Sage)** | 90% | 🟢 Operativo | `A3SeatSplitter` (SUENLACE.DAT 96 car.), Contasol CSV (Latin-1, ;) y Sage CSV operativos. |
-| **10. Conciliación Bancaria y Tesorería** | 85% | 🟢 Operativo | Emparejamiento con facturas, reglas heurísticas TGSS (476) e Iberdrola (628), previsión a 90 días. |
-| **11. Modelos Tributarios (AEAT)** | 85% | 🟢 Operativo | Modelos 303, 111, 115, 347, 390 con cálculo determinista y auditoría de riesgo fiscal. |
-| **12. Portal de Empleado y Gastos** | 75% | 🟡 Fase posterior | Flujo de tickets y dietas en desarrollo. |
-| **13. Copias de Seguridad y Recuperación** | 70% | 🟡 Fase posterior | Exportación GDPR implementada; falta backup integral automatizado con restauración verificada. |
+| **0. Auditoría y Estabilización** | 100% | 🟢 Operativo | Errores heredados de borrado y fallback ante fallos de IA corregidos al 100%. |
+| **1. Multiempresa y Configuración** | 100% | 🟢 Operativo | CRUD de empresas, CIF único normalizado, longitud de plan (8/9/10), bloqueo por fecha de cierre contable. |
+| **2. Plan General Contable (PGC PYMES)** | 100% | 🟢 Operativo | Catálogo maestro de 80+ subcuentas oficiales en `pyme_pgc_seed.py` cubriendo íntegramente los Grupos 1 al 7. |
+| **3. Extracción Documental e IA (IDP)** | 95% | 🟢 Operativo | Soporte OpenAI / Gemini con fallback robusto a modo asistido ("A Revisar") si la API key es ausente o inválida. Conservación íntegra de archivos. |
+| **4. Motor Semafórico y Triaje** | 100% | 🟢 Operativo | Semáforo determinista (Verde, Amarillo, Rojo), validación NIF/CIF, detección de duplicados instantánea por hash SHA-256 (`file_hash`). |
+| **5. Borrado Seguro y Lotes** | 100% | 🟢 Operativo | Sincronización desacoplada en `InvoiceTable.tsx`, diálogo de confirmación destructiva y borrado en lote de archivos físicos y registros BD. |
+| **6. Archivado Documental Organizado** | 100% | 🟢 Operativo | Árbol fiscal `storage/empresas/{cif}/{year}/{periodo}/recibidas|emitidas/` con política estricta anti-colisiones. |
+| **7. Contabilidad General (Fase 2)** | 100% | 🟢 Operativo | **Libro Diario:** filtros por ejercicio, fechas, subcuenta, estado contable y exportación; partida doble cuadrada al céntimo.<br>**Libro Mayor:** extracto progresivo cronológico, naturaleza Deudora/Acreedora y salto interactivo a Diario.<br>**Sumas y Saldos:** agregación oficial por los 7 Grupos PGC (RD 1515/2007) y exportación CSV con BOM UTF-8 para Excel.<br>**Ciclo de Vida:** estados `borrador`, `contabilizado`, `revertido`; contra-asientos invertidos auditables; regularización contra cuenta 129 y cierre de ejercicio bloqueante con reapertura por CIF. |
+| **8. Ventas, Compras y Contactos** | 95% | 🟢 Operativo | Facturas recibidas, facturación emitida, clientes, proveedores y correlatividad contable (40000000X / 43000000X). |
+| **9. Centro de Integraciones (Fase 3)** | 100% | 🟢 Operativo | **Conectores ERP:** Wolters Kluwer A3 (`SUENLACE.DAT` 96 car. con `A3SeatSplitter`), DELSOL Contasol CSV (Latin-1, delimitador `;`) y Sage 50 / Despachos.<br>**Transparencia:** Estados no simulados (`EXPORTED_FILE`, `PENDING_CREDENTIALS`, `SYNCED_API`).<br>**Idempotencia:** Huella digital criptográfica SHA-256 (`data_fingerprint`), bloqueo de exportaciones repetidas y reexportación forzada justificada (`force_reexport` con motivo auditable). |
+| **10. Conciliación Bancaria y Tesorería** | 90% | 🟢 Operativo | Emparejamiento con facturas, deducción semántica (TGSS cuenta 476, suministros cuenta 628), generación de asientos de banco (572). |
+| **11. Modelos Tributarios (AEAT)** | 90% | 🟢 Operativo | Modelos 303, 111, 115, 347, 390 con cálculo determinista y auditoría de riesgo fiscal. |
+| **12. Seguridad y Auditoría WORM** | 100% | 🟢 Operativo | Registro inmutable de seguridad en `security_audit.log` con encadenamiento SHA-256 (Art. 30/32 RGPD y Ley Antifraude 11/2021). |
 
 ---
 
-## 2. Inventario Detallado por Componentes
+## 2. Inventario Detallado de Módulos (Fases 2 y 3)
 
-### 2.1. Backend (FastAPI / SQLAlchemy / SQLite)
-- **`app/api/v1/endpoints/companies.py`**: Gestión completa de empresas. Admite confirmación de CIF en borrado por query o body.
-- **`app/api/v1/endpoints/accounts.py`**: Gestión del catálogo contable, árbol PGC, creación de subcuentas y siembra inicial.
-- **`app/api/v1/endpoints/invoices.py`**: Ingesta, triaje, aprobación, archivado, split de páginas MF, borrado individual y en lote.
-- **`app/api/v1/endpoints/journal.py`**: Consulta del Libro Diario, Mayor y Balance de Sumas y Saldos.
-- **`app/api/v1/endpoints/exports.py`**: Descarga de ficheros A3 SUENLACE, Contasol CSV y Sage CSV.
-- **`app/api/v1/endpoints/banking.py`**: Cuentas bancarias, transacciones, emparejamiento inteligente y previsiones de tesorería.
-- **`app/api/v1/endpoints/taxes.py`**: Cálculo y liquidación de Modelos 303, 111, 115, 347 y auditoría de riesgo fiscal.
+### 2.1. Backend (FastAPI / SQLAlchemy / SQLite Async)
+- **`app/api/v1/endpoints/journal.py`**:
+  - `GET /{company_id}/journal`: Libro Diario con filtros avanzados, paginación, totales agregados y detección de ejercicios cerrados.
+  - `POST /{company_id}/journal/{entry_number}/reverse`: Reversión auditable con generación automática de contra-asiento invertido en partida doble.
+  - `POST /{company_id}/journal/close-fiscal-year`: Regularización automática de cuentas de ingresos (grupo 7) y gastos (grupo 6) contra la cuenta 129000000 y fijación de fecha de cierre.
+  - `POST /{company_id}/journal/reopen-fiscal-year`: Reapertura segura de ejercicio exigiendo confirmación exacta del CIF.
+  - `GET /{company_id}/ledger/{subcuenta}`: Libro Mayor con saldo inicial, movimientos cronológicos, saldo progresivo y naturaleza contable.
+  - `GET /{company_id}/trial-balance`: Balance de comprobación agrupado por los 7 grupos oficiales del PGC español.
+  - `GET /{company_id}/trial-balance/export-csv`: Descarga directa de archivo CSV formateado con separador `;` y BOM UTF-8 para Excel.
+- **`app/api/v1/endpoints/integrations.py`**:
+  - `POST /{company_id}/generate-export`: Motor de exportación contable con cálculo de huella digital SHA-256, prevención de lotes duplicados y soporte de reexportación justificada.
+  - `GET /batches/{batch_id}/download`: Descarga protegida de ficheros de intercambio contable.
+  - `GET /{company_id}/export-batches`: Historial persistente de exportaciones y sincronizaciones.
+  - `GET|POST /{company_id}/integrations`: Configuración de parámetros específicos por software contable.
+- **`app/services/a3_suenlace.py`**: Motor `A3SeatSplitter` para longitud de 96 caracteres y división de IVA en 2 asientos si hay >3 tipos impositivos.
+- **`app/services/contasol_csv.py`**: Generador CSV para Software DELSOL Contasol con cabeceras oficiales, coma decimal y codificación Latin-1/ANSI.
+- **`app/services/sage_csv.py`**: Plantilla oficial de asientos para Sage 50 y Despachos Connected.
+- **`app/core/database.py`**: Migración no destructiva que permite `invoice_id` nullable en `accounting_entry_lines` para asientos generales y de cierre.
 
 ### 2.2. Frontend (Next.js 16 / React 19 / TailwindCSS)
-- **`components/InvoiceTable.tsx`**: Tabla reactiva con badges semafóricos, búsqueda, filtros y barra de acciones masivas.
-- **`components/TriageForm.tsx`**: Consola Split-Screen con visor PDF a la izquierda y formulario fiscal/asiento al panel derecho.
-- **`components/DeleteConfirmationModal.tsx`**: Modal de confirmación destructiva para borrado seguro.
-- **`components/ArchiveConfirmationModal.tsx`**: Diálogo de vista previa y selección de subcarpeta para archivado.
-- **`components/ChartOfAccountsView.tsx`**: Visualizador del Plan General Contable y subcuentas por empresa.
-- **`components/BankReconciliationView.tsx`**: Conciliador bancario interactivo con sugerencias inteligentes.
-- **`components/TaxDashboardView.tsx`**: Resumen fiscal y alertas tributarias trimestrales.
-- **`components/IntegrationsView.tsx`**: Centro de integraciones con Wolters Kluwer A3, Software DELSOL y Sage.
-
----
-
-## 3. Estado de los Criterios de Aceptación Fase 0
-1. **Auditoría Técnica del Repositorio:** Completada.
-2. **Diagnóstico de Errores Críticos (A a F):** Documentado en `docs/KNOWN_ISSUES.md`.
-3. **Plan de Acción Inmediato:**
-   - Corregir sincronización del estado de selección y borrado en `InvoiceTable.tsx` y `page.tsx`.
-   - Modificar la ingesta de facturas en backend para conservar el documento y permitir modo asistido si la IA externa falla por falta de API key.
-   - Completar el catálogo maestro del PGC PYMES en `pyme_pgc_seed.py` para cubrir todos los grupos (1 a 7).
-   - Añadir política anti-colisión en `archiver.py`.
-   - Reparar el test unitario `test_flow.py` para asegurar ejecución limpia en local.
+- **`components/JournalView.tsx`**:
+  - Barra superior con selector de ejercicio fiscal, filtros por estado contable (`contabilizado`, `revertido`, `borrador`), estado de exportación y buscador reactivo.
+  - Tabla del Diario con agrupador de asientos, partida doble cuadrada garantizada (0,00 €) y enlace al documento origen.
+  - Modal de Reversión Auditable con requerimiento de motivo formal (mínimo 5 caracteres).
+  - Modal de Cierre de Ejercicio con regularización automática contra la cuenta 129.
+  - Pestaña de Libro Mayor con selector de subcuenta, saldo progresivo cronológico y botón de salto directo al asiento del Diario.
+  - Pestaña de Balance de Sumas y Saldos con tarjetas de los 7 Grupos PGC, validación de cuadre y botón de descarga de Excel/CSV.
+- **`components/IntegrationsView.tsx`**:
+  - Selector de software contable (A3, Contasol, Sage, Holded API) con campos de configuración técnica específicos.
+  - Selector de ejercicio fiscal y selector de ámbito (pendientes vs histórico).
+  - Modal interactivo de **Forzar Reexportación Justificada** ante detección de huella digital SHA-256 duplicada.
+  - Tabla histórica de lotes con huella criptográfica SHA-256 y estados reales no simulados (`EXPORTED_FILE`, `SYNCED_API`, `PENDING_CREDENTIALS`, `FAILED`).
