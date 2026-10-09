@@ -1,9 +1,12 @@
 import uuid
 import hashlib
 import mimetypes
+import logging
 from datetime import datetime, date
 from pathlib import Path
 from typing import List, Optional, Union
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status, Response, Request
 from sqlalchemy import select, delete
