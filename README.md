@@ -58,3 +58,14 @@ cd backend
 python test_flow.py          # Pruebas del motor de reglas y exportaciones
 python test_api_upload.py    # Pruebas de la API REST y subida de archivos
 ```
+
+---
+
+## Despliegue en Vercel (Multi-Servicio)
+
+El proyecto cuenta con un archivo [`vercel.json`](./vercel.json) configurado para **Vercel Services**:
+- **Backend**: FastAPI montado en la carpeta `backend` con punto de entrada en `backend/main.py`.
+- **Frontend**: Next.js montado en la carpeta `frontend` con binding interno `BACKEND_URL`.
+- **Enrutamiento**: 
+  - Rutas `/api/*`, `/uploads/*`, `/storage/*`, `/docs` y `/openapi.json` hacia el backend.
+  - Rutas `/*` hacia el frontend.
