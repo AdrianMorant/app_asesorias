@@ -14,9 +14,17 @@ from app.api.v1.endpoints import (
     two_factor,
     webhooks,
     advisor,
+    auth,
+    operations,
 )
 
 api_router = APIRouter()
+
+# Autenticación Centralizada, RBAC y Sesiones
+api_router.include_router(auth.router, prefix="/auth", tags=["Autenticación, Sesión y RBAC"])
+
+# Operaciones, Copias de Seguridad y Diagnóstico
+api_router.include_router(operations.router, prefix="/operations", tags=["Operaciones y Respaldo"])
 
 api_router.include_router(invoices.router, prefix="/invoices", tags=["Facturas Recibidas / Gastos"])
 api_router.include_router(companies.router, prefix="/companies", tags=["Empresas"])

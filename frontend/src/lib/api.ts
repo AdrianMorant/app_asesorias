@@ -815,3 +815,93 @@ export function getA3ExportUrl(companyId?: string, companyCode: string = '00001'
   query.append('company_code', companyCode);
   return `${API_BASE}/exports/a3-suenlace?${query.toString()}`;
 }
+
+// -------------------------------------------------------------
+// AUTENTICACIÓN, SESIÓN Y RBAC EMPRESARIAL
+// -------------------------------------------------------------
+export async function loginUser(email: string, password: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Credenciales incorrectas');
+  }
+  return await res.json();
+}
+
+export async function registerUser(payload: {
+  email: string;
+  password: string;
+  full_name: string;
+  role?: string;
+  advisor_firm_name?: string;
+}): Promise<any> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error en el registro');
+  }
+  return await res.json();
+}
+
+export async function logoutUser(token?: string): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/auth/logout`, {
+    method: 'POST',
+    headers,
+  });
+  return await res.json().catch(() => ({ success: true }));
+}
+
+export async function fetchCurrentUser(token?: string): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers,
+    cache: 'no-store',
+  });
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+export async function verifyAuditChain(token?: string): Promise<any> {
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/auth/audit/verify`, {
+    headers,
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al verificar auditoría');
+  }
+  return await res.json();
+}
+
+export async function createSystemBackup(): Promise<any> {
+  const res = await fetch(`${API_BASE}/operations/backup`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al generar copia de seguridad');
+  }
+  return await res.json();
+}
+
+export async function fetchSystemHealth(): Promise<any> {
+  const res = await fetch(`${API_BASE.replace('/api/v1', '')}/health/detailed`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('Error al consultar salud del sistema');
+  return await res.json();
+}
+

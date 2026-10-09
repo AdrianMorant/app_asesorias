@@ -23,6 +23,8 @@ from app.core.gdpr_export import generate_gdpr_data_export
 from app.core.gdpr_forget import process_company_gdpr_forget, GDPRForgetResult, anonymize_text
 from app.core.audit_logger import log_security_event
 from app.api.v1.endpoints.banking import _load_transactions
+from app.core.auth_deps import get_current_user_optional
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -132,13 +134,32 @@ async def delete_company(
     company_id: str,
     cif_confirmation: Optional[str] = Query(None, description="Confirmación tecleando el CIF de la empresa"),
     payload: Optional[dict] = Body(None),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
     """
-    Elimina una empresa con confirmación estricta por CIF.
+    Elimina una empresa con confirmación estricta por CIF y autorización RBAC.
     Borra en cascada facturas, asientos, proveedores, catálogo contable
     y elimina físicamente los archivos del disco para evitar huérfanos.
     """
+    # Verificación de permisos RBAC: solo administradores o asesores
+    if current_user:
+        allowed_roles = {UserRole.SUPERADMIN.value, UserRole.COMPANY_ADMIN.value, UserRole.ADVISOR.value}
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="COMPANY_DELETE_UNAUTHORIZED",
+                resource_id=company_id,
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Administradores o Asesores pueden eliminar una empresa.",
+            )
+
     token_confirmation = cif_confirmation or (payload.get("cif_confirmation") if isinstance(payload, dict) else None)
     if not token_confirmation:
         raise HTTPException(
@@ -177,6 +198,15 @@ async def delete_company(
     # 2. Borrar empresa en base de datos (cascada automática a invoices, suppliers, accounts, entries)
     await db.delete(company)
     await db.commit()
+
+    log_security_event(
+        action="COMPANY_DELETED",
+        resource_id=company_id,
+        request=request,
+        user_id=current_user.id if current_user else "admin",
+        status="SUCCESS",
+        details={"cif": company.cif, "deleted_files": deleted_files_count},
+    )
 
     return {
         "success": True,

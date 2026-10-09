@@ -16,6 +16,9 @@ from app.models.accounting_entry import AccountingEntryLine
 from app.models.account import Account
 from app.core.audit_logger import log_security_event
 from app.services.nif_validator import normalize_nif
+from app.core.auth_deps import get_current_user_optional
+from app.models.user import User, UserRole
+from fastapi import Request
 
 router = APIRouter()
 
@@ -221,16 +224,40 @@ async def reverse_journal_entry(
     company_id: str,
     entry_number: int,
     payload: ReverseEntryRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
     """
     Revierte de forma auditable e inmutable un asiento contable.
     1. Verifica que el asiento exista y pertenezca a la empresa.
-    2. Comprueba que el ejercicio contable no esté cerrado.
-    3. Impide revertir dos veces el mismo asiento.
-    4. Genera un contra-asiento en partida doble (invirtiendo Debe y Haber) con correlativo libre.
-    5. Marca las líneas originales como 'revertido' y registra el evento de seguridad.
+    2. Comprueba permisos RBAC (solo Contables, Asesores o Administradores).
+    3. Comprueba que el ejercicio contable no esté cerrado.
+    4. Impide revertir dos veces el mismo asiento.
+    5. Genera un contra-asiento en partida doble (invirtiendo Debe y Haber) con correlativo libre.
+    6. Marca las líneas originales como 'revertido' y registra el evento de seguridad.
     """
+    if current_user:
+        allowed_roles = {
+            UserRole.SUPERADMIN.value,
+            UserRole.COMPANY_ADMIN.value,
+            UserRole.ADVISOR.value,
+            UserRole.ACCOUNTANT.value,
+        }
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="JOURNAL_REVERSAL_UNAUTHORIZED",
+                empresa_id=company_id,
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role, "entry_number": entry_number},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Contables, Asesores o Administradores pueden revertir asientos.",
+            )
+
     comp = await db.get(Company, company_id)
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
@@ -348,14 +375,33 @@ async def reverse_journal_entry(
 async def close_fiscal_year(
     company_id: str,
     payload: CloseFiscalYearRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
     """
     Ejecuta el cierre contable del ejercicio:
-    1. Calcula el saldo de ingresos (Grupo 7) y gastos (Grupo 6).
-    2. Genera el asiento de regularización contable contra la cuenta 129000000 (Resultado del Ejercicio).
-    3. Fija la fecha de cierre contable en la empresa para impedir asientos posteriores.
+    1. Verifica permisos RBAC (solo Administradores o Asesores).
+    2. Calcula el saldo de ingresos (Grupo 7) y gastos (Grupo 6).
+    3. Genera el asiento de regularización contable contra la cuenta 129000000 (Resultado del Ejercicio).
+    4. Fija la fecha de cierre contable en la empresa para impedir asientos posteriores.
     """
+    if current_user:
+        allowed_roles = {UserRole.SUPERADMIN.value, UserRole.COMPANY_ADMIN.value, UserRole.ADVISOR.value}
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="FISCAL_YEAR_CLOSE_UNAUTHORIZED",
+                empresa_id=company_id,
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role, "year": payload.year},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Administradores o Asesores pueden realizar el cierre del ejercicio contable.",
+            )
+
     comp = await db.get(Company, company_id)
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")
@@ -523,9 +569,27 @@ async def close_fiscal_year(
 async def reopen_fiscal_year(
     company_id: str,
     payload: ReopenFiscalYearRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
-    """Reabre el ejercicio contable retrocediendo la fecha de cierre previa confirmación estricta de CIF."""
+    """Reabre el ejercicio contable retrocediendo la fecha de cierre previa autorización RBAC y confirmación estricta de CIF."""
+    if current_user:
+        allowed_roles = {UserRole.SUPERADMIN.value, UserRole.COMPANY_ADMIN.value, UserRole.ADVISOR.value}
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="FISCAL_YEAR_REOPEN_UNAUTHORIZED",
+                empresa_id=company_id,
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Administradores o Asesores pueden reabrir ejercicios cerrados.",
+            )
+
     comp = await db.get(Company, company_id)
     if not comp:
         raise HTTPException(status_code=404, detail="Empresa no encontrada")

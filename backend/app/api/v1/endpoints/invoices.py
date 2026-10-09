@@ -24,6 +24,8 @@ from app.models.invoice import Invoice, InvoiceTaxBreakdown
 from app.models.accounting_entry import AccountingEntryLine
 from app.models.account import Account
 from app.models.contact import Contact
+from app.core.auth_deps import get_current_user_optional
+from app.models.user import User, UserRole
 from app.schemas.invoice_dto import (
     InvoiceResponseDTO,
     InvoiceUpdateDTO,
@@ -949,13 +951,37 @@ async def reprocess_invoice(
 @router.delete("/{invoice_id}")
 async def delete_invoice(
     invoice_id: str,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
     """
     Elimina una factura individualmente:
-    1. Borra físicamente el archivo del disco (en uploads/ o storage/).
-    2. Borra los registros relacionales (factura, desgloses y apuntes) en cascada.
+    1. Verifica permisos RBAC (solo Contables, Asesores o Administradores).
+    2. Borra físicamente el archivo del disco (en uploads/ o storage/).
+    3. Borra los registros relacionales (factura, desgloses y apuntes) en cascada.
     """
+    if current_user:
+        allowed_roles = {
+            UserRole.SUPERADMIN.value,
+            UserRole.COMPANY_ADMIN.value,
+            UserRole.ADVISOR.value,
+            UserRole.ACCOUNTANT.value,
+        }
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="INVOICE_DELETE_UNAUTHORIZED",
+                resource_id=invoice_id,
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Contables, Asesores o Administradores pueden eliminar documentos contables.",
+            )
+
     res = await db.execute(select(Invoice).where(Invoice.id == invoice_id))
     invoice = res.scalars().first()
     if not invoice:
@@ -975,6 +1001,16 @@ async def delete_invoice(
     await db.delete(invoice)
     await db.commit()
 
+    log_security_event(
+        action="INVOICE_DELETED",
+        resource_id=invoice_id,
+        empresa_id=invoice.company_id,
+        request=request,
+        user_id=current_user.id if current_user else "admin",
+        status="SUCCESS",
+        details={"file_deleted": file_deleted, "invoice_number": invoice.invoice_number},
+    )
+
     return {
         "success": True,
         "message": "Factura y archivo físico eliminados correctamente.",
@@ -987,12 +1023,35 @@ async def delete_invoice(
 @router.delete("/bulk")
 async def bulk_delete_invoices(
     payload: BulkDeleteInvoicesDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    request: Request = None,
 ):
     """
     Elimina múltiples facturas por lotes:
-    Borra físicamente cada archivo del disco y elimina los registros de la base de datos.
+    1. Verifica permisos RBAC (solo Contables, Asesores o Administradores).
+    2. Borra físicamente cada archivo del disco y elimina los registros de la base de datos.
     """
+    if current_user:
+        allowed_roles = {
+            UserRole.SUPERADMIN.value,
+            UserRole.COMPANY_ADMIN.value,
+            UserRole.ADVISOR.value,
+            UserRole.ACCOUNTANT.value,
+        }
+        if current_user.global_role not in allowed_roles:
+            log_security_event(
+                action="BULK_INVOICE_DELETE_UNAUTHORIZED",
+                request=request,
+                user_id=current_user.id,
+                status="DENIED",
+                details={"role": current_user.global_role, "count": len(payload.invoice_ids)},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Permisos insuficientes: solo Contables, Asesores o Administradores pueden eliminar documentos contables.",
+            )
+
     if not payload.invoice_ids:
         return {"success": True, "deleted_count": 0, "deleted_ids": []}
 
@@ -1016,6 +1075,14 @@ async def bulk_delete_invoices(
         await db.delete(inv)
 
     await db.commit()
+
+    log_security_event(
+        action="BULK_INVOICES_DELETED",
+        request=request,
+        user_id=current_user.id if current_user else "admin",
+        status="SUCCESS",
+        details={"deleted_count": len(deleted_ids), "deleted_files_count": deleted_files},
+    )
 
     return {
         "success": True,

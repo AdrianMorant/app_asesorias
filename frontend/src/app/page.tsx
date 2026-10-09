@@ -41,6 +41,7 @@ import { DeleteConfirmationModal } from '@/components/DeleteConfirmationModal';
 import { MultiInvoiceSplitterModal } from '@/components/MultiInvoiceSplitterModal';
 import { InteractiveDemoModal } from '@/components/InteractiveDemoModal';
 import { NotificationCenterDrawer } from '@/components/NotificationCenterDrawer';
+import SecuritySettingsModal from '@/components/SecuritySettingsModal';
 import { ToastContainer, ToastMessage } from '@/components/Toast';
 
 import {
@@ -106,6 +107,8 @@ export default function AppSuitePage() {
   const [showManualModal, setShowManualModal] = useState<boolean>(false);
   const [showCompanyManagerModal, setShowCompanyManagerModal] = useState<boolean>(false);
   const [showNewCompanyModal, setShowNewCompanyModal] = useState<boolean>(false);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState<boolean>(false);
+  const [userRole, setUserRole] = useState<string>('ADVISOR');
 
   // Campos para crear nueva empresa
   const [newCompanyCif, setNewCompanyCif] = useState<string>('');
@@ -584,6 +587,19 @@ export default function AppSuitePage() {
               title="Refrescar datos"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+            </button>
+
+            {/* Centro de Seguridad y RBAC */}
+            <button
+              onClick={() => setIsSecurityModalOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 shadow-xs transition-all active:scale-95"
+              title="Control de acceso, roles RBAC y copias de seguridad"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Seguridad & RBAC</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                {userRole}
+              </span>
             </button>
 
             {/* Probar Demo Guiada (Fase C) */}
@@ -1187,6 +1203,18 @@ export default function AppSuitePage() {
           }}
         />
       )}
+
+      {/* Modal del Centro de Seguridad, RBAC y Fiabilidad Operativa */}
+      <SecuritySettingsModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+        currentRole={userRole}
+        onRoleChange={(newRole) => {
+          setUserRole(newRole);
+          notify('info', `Rol activo cambiado a '${newRole}' para pruebas RBAC.`);
+        }}
+        currentUserEmail="asesor@konta.ai"
+      />
     </div>
   );
 }

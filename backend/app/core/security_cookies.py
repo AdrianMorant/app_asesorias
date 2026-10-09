@@ -105,15 +105,18 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None
 ) -> str:
     """
-    Crea un Access Token con vida útil corta (por defecto: 15 minutos).
+    Crea un Access Token con vida útil corta (por defecto: 15 minutos) y un
+    identificador criptográfico único jti para revocación inmediata (Token Revocation List).
     """
     now = datetime.now(timezone.utc)
     delta = expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     expire = now + delta
     
+    jti = secrets.token_urlsafe(32)
     payload: Dict[str, Any] = {
         "sub": str(subject),
         "type": "access",
+        "jti": jti,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }

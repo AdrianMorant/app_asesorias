@@ -22,7 +22,9 @@ from app.schemas.integration_dto import (
 )
 from app.services.a3_suenlace import generate_a3_suenlace_bytes, generate_a3_suenlace
 from app.services.contasol_csv import generate_contasol_csv_bytes, generate_contasol_csv
-from app.services.sage_csv import generate_sage_csv_bytes, generate_sage_csv
+from app.core.audit_logger import log_security_event
+from app.core.auth_deps import get_current_user_optional
+from app.models.user import User, UserRole
 
 router = APIRouter()
 
@@ -96,6 +98,7 @@ async def generate_export_batch(
     company_id: str,
     req: GenerateExportRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Genera un lote de exportación contable (A3, CONTASOL, SAGE o HOLDED_API):
@@ -188,6 +191,34 @@ async def generate_export_batch(
                 status_code=400,
                 detail=f"Prevención de duplicados: El lote exacto de {len(invoices)} factura(s) ya fue exportado a {req.software_type} el {existing_dup.created_at.strftime('%d/%m/%Y %H:%M')} (Lote ID: {existing_dup.id[:8]}...). Si desea regenerarlo deliberadamente, active 'force_reexport' e introduzca el motivo."
             )
+    else:
+        # Validación RBAC para forzar reexportación
+        if current_user:
+            allowed_roles = {UserRole.SUPERADMIN.value, UserRole.COMPANY_ADMIN.value, UserRole.ADVISOR.value}
+            if current_user.global_role not in allowed_roles:
+                log_security_event(
+                    action="FORCE_REEXPORT_UNAUTHORIZED",
+                    empresa_id=company_id,
+                    user_id=current_user.id,
+                    status="DENIED",
+                    details={"role": current_user.global_role, "software": req.software_type},
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Permisos insuficientes: solo Administradores o Asesores pueden forzar una reexportación contable.",
+                )
+
+        log_security_event(
+            action="EXPORT_BATCH_FORCE_REEXPORT",
+            empresa_id=company_id,
+            user_id=current_user.id if current_user else "admin",
+            status="SUCCESS",
+            details={
+                "software": req.software_type,
+                "invoices_count": len(invoices),
+                "fingerprint": batch_fingerprint,
+            },
+        )
 
     # 2. Rigor Contable & Seguridad: Validar que ninguna factura esté en estado ROJO
     red_invoices = [inv.invoice_number for inv in invoices if inv.status == "RED"]
