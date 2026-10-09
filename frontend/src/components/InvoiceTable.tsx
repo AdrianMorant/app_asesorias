@@ -44,32 +44,22 @@ export const InvoiceTable: React.FC<Props> = ({
   // Selección múltiple para borrado por lotes
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Facturas eliminadas localmente para refrescar la pantalla y hacerlas desaparecer de inmediato
-  const [locallyDeletedIds, setLocallyDeletedIds] = useState<string[]>([]);
-
-  // 1. Sincronización reactiva con la lista de facturas que llega por props
+  // Sincronización estricta: sólo conservar IDs que efectivamente sigan existiendo en invoices
   useEffect(() => {
-    // Limpiar selección de facturas que ya no existan en la lista de facturas
     setSelectedIds((prev) => {
       if (prev.length === 0) return prev;
       const valid = prev.filter((id) => invoices.some((inv) => inv.id === id));
       return valid.length === prev.length ? prev : valid;
     });
-
-    // Limpiar borrados locales si invoices ya los ha retirado de su estado
-    setLocallyDeletedIds((prev) => {
-      if (prev.length === 0) return prev;
-      return prev.filter((id) => invoices.some((inv) => inv.id === id));
-    });
   }, [invoices]);
 
-  // Facturas activas visibles (excluyendo inmediatamente las eliminadas para que desaparezcan de inmediato)
-  const activeInvoices = invoices.filter(
-    (inv) => !locallyDeletedIds.includes(inv.id)
+  // IDs seleccionados actualmente válidos y presentes en los datos
+  const validSelectedIds = selectedIds.filter((id) =>
+    invoices.some((inv) => inv.id === id)
   );
 
-  // Filtrado reactivo sobre las facturas activas
-  const filteredInvoices = activeInvoices.filter((inv) => {
+  // Filtrado reactivo sobre las facturas
+  const filteredInvoices = invoices.filter((inv) => {
     // Búsqueda
     const term = search.toLowerCase();
     const matchesSearch =
@@ -92,8 +82,8 @@ export const InvoiceTable: React.FC<Props> = ({
 
   // Manejo de selección masiva
   const handleToggleSelectAll = () => {
-    if (selectedIds.length > 0) {
-      setSelectedIds([]); // Resetea inmediatamente a vacío al deseleccionar
+    if (validSelectedIds.length > 0) {
+      setSelectedIds([]);
     } else {
       setSelectedIds(filteredInvoices.map((inv) => inv.id));
     }
@@ -106,28 +96,20 @@ export const InvoiceTable: React.FC<Props> = ({
     );
   };
 
-  // 1. Reseteo inmediato a vacío [] al deseleccionar
   const handleClearSelection = () => {
     setSelectedIds([]);
   };
 
-  // 1 & 3. Reseteo inmediato a [] al borrar y desaparición inmediata en pantalla
+  // Solicita la confirmación de borrado masivo al padre
   const handleExecuteBulkDelete = () => {
-    if (selectedIds.length === 0 || !onBulkDelete) return;
-    const idsToDelete = [...selectedIds];
-    // 1. Resetea el array de facturas seleccionadas a vacío [] inmediatamente
-    setSelectedIds([]);
-    // 3. Refresca la lista en pantalla para que desaparezcan de inmediato
-    setLocallyDeletedIds((prev) => [...prev, ...idsToDelete]);
-    // Notifica al padre
-    onBulkDelete(idsToDelete);
+    if (validSelectedIds.length === 0 || !onBulkDelete) return;
+    onBulkDelete([...validSelectedIds]);
   };
 
-  // Borrado individual asegurando limpieza de selección y desaparición inmediata
+  // Borrado individual asegurando limpieza de selección
   const handleDeleteRow = (inv: Invoice, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedIds((prev) => prev.filter((id) => id !== inv.id));
-    setLocallyDeletedIds((prev) => [...prev, inv.id]);
     if (onDeleteInvoice) {
       onDeleteInvoice(inv);
     }
@@ -135,7 +117,7 @@ export const InvoiceTable: React.FC<Props> = ({
 
   const isAllSelected =
     filteredInvoices.length > 0 &&
-    selectedIds.length === filteredInvoices.length;
+    validSelectedIds.length === filteredInvoices.length;
 
   return (
     <div className="relative bg-slate-900/60 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
@@ -164,7 +146,7 @@ export const InvoiceTable: React.FC<Props> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Todas ({activeInvoices.length})
+              Todas ({invoices.length})
             </button>
             <button
               type="button"
@@ -425,17 +407,17 @@ export const InvoiceTable: React.FC<Props> = ({
         </table>
       </div>
 
-      {/* 2. BARRA DE ACCIONES FLOTANTE: Oculta estrictamente si selectedIds.length === 0 */}
-      {selectedIds.length > 0 && (
+      {/* 2. BARRA DE ACCIONES FLOTANTE: Oculta estrictamente si no hay facturas seleccionadas válidas */}
+      {validSelectedIds.length > 0 && (
         <div className="sticky bottom-0 left-0 right-0 z-20 px-6 py-3 bg-slate-950/95 border-t border-cyan-500/40 backdrop-blur-md flex items-center justify-between shadow-2xl animate-in slide-in-from-bottom-2 duration-150">
           <div className="flex items-center gap-3">
             <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-xs font-mono">
-              {selectedIds.length}
+              {validSelectedIds.length}
             </span>
             <span className="text-xs text-slate-300 font-medium">
-              {selectedIds.length === 1
+              {validSelectedIds.length === 1
                 ? '1 factura seleccionada'
-                : `${selectedIds.length} facturas seleccionadas`}
+                : `${validSelectedIds.length} facturas seleccionadas`}
             </span>
             <button
               type="button"
@@ -454,7 +436,7 @@ export const InvoiceTable: React.FC<Props> = ({
                 className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-950/50 transition cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                Borrar {selectedIds.length} {selectedIds.length === 1 ? 'factura' : 'facturas'}
+                Borrar {validSelectedIds.length} {validSelectedIds.length === 1 ? 'factura' : 'facturas'}
               </button>
             )}
           </div>

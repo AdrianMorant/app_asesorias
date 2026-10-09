@@ -157,31 +157,32 @@ async def upload_and_process_invoice(
     file_hash = hashlib.sha256(file_bytes).hexdigest()
 
     # 4.2 Extracción de información mediante LLM multimodal estructurado
+    ai_extraction_failed = False
+    ai_error_detail = ""
     try:
         extraction: InvoiceExtractionResult = await extract_invoice_data(
             file_bytes=file_bytes,
             mime_type=mime_type,
             file_name=file.filename
         )
-    except ValueError as ve:
-        if saved_file_path.exists():
-            try:
-                saved_file_path.unlink()
-            except Exception:
-                pass
-        raise HTTPException(
-            status_code=400,
-            detail=str(ve)
-        )
     except Exception as e:
-        if saved_file_path.exists():
-            try:
-                saved_file_path.unlink()
-            except Exception:
-                pass
-        raise HTTPException(
-            status_code=400,
-            detail=f"Error durante la extracción de datos con IA: {str(e)}"
+        logger.warning(f"Extracción automática con IA no disponible para {file.filename}: {e}")
+        ai_extraction_failed = True
+        ai_error_detail = str(e)
+        # Modo asistido: conservar archivo y crear borrador para triaje manual o reintento
+        safe_stem = Path(file.filename).stem.replace(" ", "_")[:30] or "DOC"
+        extraction = InvoiceExtractionResult(
+            issuer_name="Proveedor pendiente de identificar",
+            issuer_tax_id="S/NIF",
+            invoice_number=safe_stem,
+            issue_date=date.today().isoformat(),
+            total_base=0.0,
+            total_tax=0.0,
+            retention_rate=0.0,
+            retention_amount=0.0,
+            total_amount=0.0,
+            concept_summary=f"Documento subido: {file.filename} (Requiere triaje manual o reintento de IA)",
+            taxes=[]
         )
 
     # 5. Evaluación de Reglas Semafóricas (Rojo, Amarillo, Verde) con detección de duplicados y bloqueo contable
@@ -191,6 +192,16 @@ async def upload_and_process_invoice(
         db=db,
         file_hash=file_hash
     )
+
+    if ai_extraction_failed:
+        from app.schemas.invoice_validation import TrafficLightStatus
+        rules_result.status = TrafficLightStatus.RED
+        warning_ai = (
+            "Extracción con IA pendiente: revise la configuración de API Key en backend/.env o "
+            "complete los datos fiscales manualmente en la consola de triaje."
+        )
+        if warning_ai not in rules_result.reasons:
+            rules_result.reasons.insert(0, warning_ai)
 
     # 5.1 Conteo de páginas e inspección de Multi-Factura (MF)
     num_paginas = 1
@@ -823,6 +834,113 @@ async def approve_invoice(
     reload_res = await db.execute(reload_stmt)
     full_invoice = reload_res.scalars().first()
     return full_invoice
+
+
+@router.post("/{invoice_id}/reprocess", response_model=InvoiceResponseDTO)
+async def reprocess_invoice(
+    invoice_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reejecuta la extracción con IA multimodal sobre el archivo original existente
+    y recalcula las reglas semafóricas.
+    """
+    invoice = await db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada")
+
+    if not invoice.file_path:
+        raise HTTPException(status_code=404, detail="La factura no tiene ruta de archivo.")
+
+    file_p = Path(invoice.file_path)
+    if not file_p.exists():
+        raise HTTPException(status_code=404, detail="Archivo físico original no encontrado en el servidor.")
+
+    try:
+        raw_bytes = read_decrypted_file(file_p)
+    except Exception:
+        with open(file_p, "rb") as f:
+            raw_bytes = f.read()
+        try:
+            raw_bytes = decrypt_file_bytes(raw_bytes)
+        except Exception:
+            pass
+
+    guessed_type, _ = mimetypes.guess_type(invoice.file_name or str(file_p))
+    mime_type = guessed_type or "application/pdf"
+
+    try:
+        extraction: InvoiceExtractionResult = await extract_invoice_data(
+            file_bytes=raw_bytes,
+            mime_type=mime_type,
+            file_name=invoice.file_name
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fallo al reintentar extracción con IA: {str(e)}"
+        )
+
+    # Recalcular reglas semafóricas
+    rules_res = await evaluate_invoice_rules(
+        extraction=extraction,
+        company_id=invoice.company_id,
+        db=db,
+        current_invoice_id=invoice.id,
+        file_hash=invoice.file_hash
+    )
+
+    # Actualizar datos de factura
+    invoice.issuer_name = extraction.issuer_name
+    invoice.issuer_cif = extraction.issuer_tax_id or invoice.issuer_cif
+    invoice.recipient_name = extraction.recipient_name
+    invoice.recipient_cif = extraction.recipient_tax_id
+    invoice.invoice_number = extraction.invoice_number or invoice.invoice_number
+    if extraction.issue_date:
+        try:
+            invoice.issue_date = datetime.strptime(extraction.issue_date, "%Y-%m-%d").date()
+        except Exception:
+            pass
+    if extraction.due_date:
+        try:
+            invoice.due_date = datetime.strptime(extraction.due_date, "%Y-%m-%d").date()
+        except Exception:
+            pass
+
+    invoice.total_base = extraction.total_base
+    invoice.total_tax = extraction.total_tax
+    invoice.total_amount = extraction.total_amount
+    invoice.total_retention = extraction.retention_amount
+    invoice.retention_percentage = extraction.retention_rate
+    invoice.concept_summary = extraction.concept_summary
+    invoice.status = rules_res.status.value
+    invoice.status_reasons = rules_res.reasons
+    invoice.raw_extraction = extraction.model_dump()
+    if rules_res.supplier_id:
+        invoice.supplier_id = rules_res.supplier_id
+
+    # Actualizar desglose impositivo
+    await db.execute(delete(InvoiceTaxBreakdown).where(InvoiceTaxBreakdown.invoice_id == invoice.id))
+    for t in (extraction.taxes or []):
+        db.add(InvoiceTaxBreakdown(
+            invoice_id=invoice.id,
+            tax_rate=t.tax_rate,
+            tax_base=t.base_amount,
+            tax_amount=t.tax_amount
+        ))
+
+    await db.commit()
+
+    reload_stmt = (
+        select(Invoice)
+        .where(Invoice.id == invoice.id)
+        .options(
+            selectinload(Invoice.tax_breakdown),
+            selectinload(Invoice.accounting_entries)
+        )
+    )
+    res = await db.execute(reload_stmt)
+    return res.scalars().first()
 
 
 @router.delete("/{invoice_id}")

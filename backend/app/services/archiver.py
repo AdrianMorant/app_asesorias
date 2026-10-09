@@ -6,14 +6,6 @@ from typing import Optional, Dict
 from app.core.config import settings
 from app.models.invoice import Invoice
 
-import os
-import re
-import shutil
-from pathlib import Path
-from typing import Optional, Dict
-from app.core.config import settings
-from app.models.invoice import Invoice
-
 def get_period_folder(month: int, periodicity: str = "Trimestral") -> str:
     """
     Calcula la carpeta del periodo fiscal según la periodicidad configurada:
@@ -142,6 +134,21 @@ def archive_invoice_file(
         new_filename = f"{fecha_str}_{emisor_cif}_{safe_number}{extension}"
 
     target_file_path = target_dir / new_filename
+
+    # Política explícita de resolución de colisiones: si el archivo de destino ya existe,
+    # sufijar correlativamente (_1, _2, etc.) para preservar la integridad de ambos documentos.
+    if target_file_path.exists() and target_file_path.resolve() != src_path.resolve():
+        stem = target_file_path.stem
+        ext = target_file_path.suffix
+        counter = 1
+        while True:
+            candidate_name = f"{stem}_{counter}{ext}"
+            candidate_path = target_dir / candidate_name
+            if not candidate_path.exists():
+                new_filename = candidate_name
+                target_file_path = candidate_path
+                break
+            counter += 1
 
     # Mover físicamente el archivo
     shutil.move(str(src_path), str(target_file_path))

@@ -44,6 +44,7 @@ backend/uploads/*
 backend/storage/*
 !backend/storage/.gitkeep
 backend/storage_test/
+storage_test/
 
 # Logs
 *.log

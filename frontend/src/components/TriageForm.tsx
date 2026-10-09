@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Invoice, Supplier, AccountingEntryLine } from '@/types';
 import { TrafficLightBadge } from './TrafficLightBadge';
 import { ArchiveConfirmationModal } from './ArchiveConfirmationModal';
-import { fetchNextSubaccount } from '@/lib/api';
+import { fetchNextSubaccount, reprocessInvoice } from '@/lib/api';
 import {
   Building2,
   Calendar,
@@ -119,7 +119,28 @@ export const TriageForm: React.FC<Props> = ({
 
   const [saving, setSaving] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleReprocess = async () => {
+    setReprocessing(true);
+    setMessage(null);
+    try {
+      const refreshed = await reprocessInvoice(invoice.id);
+      await onSave(refreshed);
+      setMessage({
+        type: 'success',
+        text: 'Extracción completada con IA y reglas semafóricas recalculadas.'
+      });
+    } catch (err: any) {
+      setMessage({
+        type: 'error',
+        text: err.message || 'Error al reintentar la extracción con IA.'
+      });
+    } finally {
+      setReprocessing(false);
+    }
+  };
 
   // Modal para confirmar la ruta de archivado
   const [showArchiveModal, setShowArchiveModal] = useState(false);
@@ -469,6 +490,17 @@ export const TriageForm: React.FC<Props> = ({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={handleReprocess}
+              disabled={reprocessing || invoice.is_processed}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600/20 hover:bg-indigo-600/35 text-indigo-300 border border-indigo-500/30 transition shadow cursor-pointer disabled:opacity-50"
+              title="Reintentar lectura y extracción con IA multimodal sobre el archivo original"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${reprocessing ? 'animate-spin' : ''}`} />
+              {reprocessing ? 'Extrayendo...' : 'Reintentar IA'}
+            </button>
 
             <button
               type="button"

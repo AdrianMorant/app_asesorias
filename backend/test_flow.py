@@ -1,14 +1,19 @@
 import asyncio
 import sys
 from datetime import date
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+
 from app.core.database import init_db, AsyncSessionLocal
 from app.models.company import Company
 from app.models.supplier import Supplier
+from app.models.account import Account
 from app.models.invoice import Invoice, InvoiceTaxBreakdown
 from app.models.accounting_entry import AccountingEntryLine
 from app.schemas.invoice_extraction import InvoiceExtractionResult, TaxBreakdownItem
 from app.services.rules_engine import evaluate_invoice_rules
 from app.services.accounting_engine import generate_accounting_entry_lines
+from app.services.pyme_pgc_seed import seed_company_chart_of_accounts
 from app.services.exporters.contasol_csv import export_invoices_to_contasol_csv
 from app.services.exporters.a3_suenlace import export_invoices_to_a3_suenlace
 from app.services.nif_validator import validate_spanish_id
@@ -23,6 +28,12 @@ async def run_tests():
     print("[1] Base de datos SQLite inicializada con éxito.")
 
     async with AsyncSessionLocal() as db:
+        # Limpieza previa para garantizar idempotencia en ejecuciones repetidas
+        existing_c = (await db.execute(select(Company).where(Company.cif == "A28015865"))).scalar_one_or_none()
+        if existing_c:
+            await db.delete(existing_c)
+            await db.commit()
+
         # Crear empresa de prueba
         company = Company(
             cif="A28015865",  # CIF válido
@@ -32,7 +43,15 @@ async def run_tests():
         db.add(company)
         await db.flush()
 
-        # Crear proveedor habitual
+        # Sembrar el Plan General Contable para la empresa
+        await seed_company_chart_of_accounts(db, company.id, 9)
+
+        # Crear proveedor habitual con cuentas registradas en el plan
+        acc_gasto = Account(company_id=company.id, codigo="629000001", descripcion="Otros servicios cloud", tipo="GASTO")
+        acc_prov = Account(company_id=company.id, codigo="400000042", descripcion="Tecnologías Cloud Iberia S.L.", tipo="PROVEEDOR")
+        db.add(acc_gasto)
+        db.add(acc_prov)
+
         supplier = Supplier(
             company_id=company.id,
             cif="B87654323",
@@ -231,10 +250,13 @@ async def run_tests():
         # -------------------------------------------------------------
         # ESCENARIO 8: EXPORTACIÓN CONTASOL Y A3 SUENLACE
         # -------------------------------------------------------------
-        # Cargar factura inv_green con apuntes
-        from sqlalchemy.orm import selectinload
-        from sqlalchemy import select
-        res = await db.execute(select(Invoice).options(selectinload(Invoice.accounting_entries)))
+        # Cargar factura inv_green con apuntes y desgloses de impuestos
+        res = await db.execute(
+            select(Invoice).options(
+                selectinload(Invoice.accounting_entries),
+                selectinload(Invoice.tax_breakdown),
+            )
+        )
         invoices_to_export = res.scalars().all()
 
         contasol_csv = export_invoices_to_contasol_csv(invoices_to_export)

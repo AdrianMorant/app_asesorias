@@ -97,17 +97,33 @@ def export_invoices_to_a3_suenlace(
         doc_str = (inv.invoice_number or "S/N").ljust(10)[:10]
         cif_str = (inv.issuer_cif or "").ljust(10)[:10]
 
-        taxes = list(inv.tax_breakdown) if hasattr(inv, "tax_breakdown") and inv.tax_breakdown else []
+        taxes = []
+        if "tax_breakdown" in getattr(inv, "__dict__", {}):
+            taxes = list(inv.tax_breakdown or [])
+        elif hasattr(inv, "tax_breakdown"):
+            try:
+                taxes = list(inv.tax_breakdown or [])
+            except Exception:
+                taxes = []
 
         # Obtener subcuentas de proveedor y gasto de los apuntes contables
         cta_prov = None
         cta_gasto = None
-        if inv.accounting_entries:
-            for e in inv.accounting_entries:
-                if e.subcuenta.startswith("400") or e.subcuenta.startswith("410"):
-                    cta_prov = e.subcuenta
-                elif e.subcuenta.startswith("6"):
-                    cta_gasto = e.subcuenta
+        acc_entries = []
+        if "accounting_entries" in getattr(inv, "__dict__", {}):
+            acc_entries = list(inv.accounting_entries or [])
+        elif hasattr(inv, "accounting_entries"):
+            try:
+                acc_entries = list(inv.accounting_entries or [])
+            except Exception:
+                acc_entries = []
+
+        for e in acc_entries:
+            sc = getattr(e, "subcuenta", "") or ""
+            if sc.startswith("400") or sc.startswith("410"):
+                cta_prov = sc
+            elif sc.startswith("6"):
+                cta_gasto = sc
 
         if not cta_prov:
             zeros = "0" * max(0, account_digits - 4)

@@ -71,6 +71,12 @@ export async function createCompany(data: {
   plan_cuentas_longitud: number;
   storage_base_path?: string;
   iva_periodicity?: string;
+  modalidad_uso?: string;
+  regimen_tributario?: string;
+  software_destino?: string;
+  domicilio_fiscal?: string | null;
+  email_contacto?: string | null;
+  telefono_contacto?: string | null;
 }): Promise<Company> {
   const res = await fetch(`${API_BASE}/companies`, {
     method: 'POST',
@@ -91,6 +97,13 @@ export async function updateCompany(
     plan_cuentas_longitud?: number;
     storage_base_path?: string;
     iva_periodicity?: string;
+    modalidad_uso?: string;
+    regimen_tributario?: string;
+    software_destino?: string;
+    domicilio_fiscal?: string | null;
+    email_contacto?: string | null;
+    telefono_contacto?: string | null;
+    is_active?: boolean;
   }
 ): Promise<Company> {
   const res = await fetch(`${API_BASE}/companies/${companyId}`, {
@@ -317,6 +330,20 @@ export async function updateInvoice(invoiceId: string, payload: InvoiceUpdatePay
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || 'Error al actualizar la factura');
+  }
+
+  return await res.json();
+}
+
+export async function reprocessInvoice(invoiceId: string): Promise<Invoice> {
+  const res = await fetch(`${API_BASE}/invoices/${invoiceId}/reprocess`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Error al reintentar la extracción con IA');
   }
 
   return await res.json();

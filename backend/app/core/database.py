@@ -49,6 +49,34 @@ async def init_db() -> None:
         except Exception:
             pass
         try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN modalidad_uso VARCHAR(30) DEFAULT 'copiloto_contable'"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN regimen_tributario VARCHAR(50) DEFAULT 'general'"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN software_destino VARCHAR(50) DEFAULT 'a3'"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN domicilio_fiscal VARCHAR(255)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN email_contacto VARCHAR(100)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN telefono_contacto VARCHAR(30)"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE companies ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+        except Exception:
+            pass
+        try:
             await conn.execute(text("ALTER TABLE accounts ADD COLUMN debe_inicial FLOAT DEFAULT 0.0"))
         except Exception:
             pass

@@ -107,6 +107,13 @@ export interface Company {
   plan_cuentas_longitud: number;
   storage_base_path: string;
   iva_periodicity?: 'Trimestral' | 'Mensual' | 'Anual';
+  modalidad_uso?: 'erp_completo' | 'copiloto_contable';
+  regimen_tributario?: 'general' | 'simplificado' | 'recargo_equivalencia' | 'exento' | string;
+  software_destino?: 'a3' | 'contasol' | 'sage' | 'holded' | 'anfix' | 'cegid' | 'otro' | string;
+  domicilio_fiscal?: string | null;
+  email_contacto?: string | null;
+  telefono_contacto?: string | null;
+  is_active?: boolean;
   fecha_cierre_contable?: string | null;
   subcuenta_suplidos_defecto?: string | null;
   created_at: string;

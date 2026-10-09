@@ -113,6 +113,9 @@ export default function AppSuitePage() {
   const [newCompanyPlanLong, setNewCompanyPlanLong] = useState<number>(9);
   const [newCompanyStorageBase, setNewCompanyStorageBase] = useState<string>('storage');
   const [newCompanyIvaPeriod, setNewCompanyIvaPeriod] = useState<string>('Trimestral');
+  const [newCompanyModalidad, setNewCompanyModalidad] = useState<'erp_completo' | 'copiloto_contable'>('copiloto_contable');
+  const [newCompanySoftwareDestino, setNewCompanySoftwareDestino] = useState<string>('a3');
+  const [newCompanyRegimen, setNewCompanyRegimen] = useState<string>('general');
   const [creatingCompany, setCreatingCompany] = useState<boolean>(false);
   const [newCompanyError, setNewCompanyError] = useState<string | null>(null);
 
@@ -327,23 +330,30 @@ export default function AppSuitePage() {
   };
 
   const handleConfirmDelete = async () => {
-    if (deleteModalState.mode === 'single' && deleteModalState.invoice) {
-      const targetId = deleteModalState.invoice.id;
-      await deleteInvoice(targetId);
-      setInvoices((prev) => prev.filter((i) => i.id !== targetId));
-      if (activeInvoice && activeInvoice.id === targetId) {
-        setActiveInvoice(null);
+    try {
+      if (deleteModalState.mode === 'single' && deleteModalState.invoice) {
+        const targetId = deleteModalState.invoice.id;
+        await deleteInvoice(targetId);
+        setInvoices((prev) => prev.filter((i) => i.id !== targetId));
+        if (activeInvoice && activeInvoice.id === targetId) {
+          setActiveInvoice(null);
+        }
+        notify('success', 'Factura y fichero físico eliminados permanentemente.', 'Factura Eliminada');
+      } else if (deleteModalState.mode === 'bulk' && deleteModalState.ids) {
+        const idsToDelete = [...deleteModalState.ids];
+        await bulkDeleteInvoices(idsToDelete);
+        setInvoices((prev) => prev.filter((i) => !idsToDelete.includes(i.id)));
+        if (activeInvoice && idsToDelete.includes(activeInvoice.id)) {
+          setActiveInvoice(null);
+        }
+        notify('success', `${idsToDelete.length} facturas y ficheros eliminados con éxito.`, 'Lote Eliminado');
       }
-      notify('success', 'Factura y fichero físico eliminados permanentemente.', 'Factura Eliminada');
-    } else if (deleteModalState.mode === 'bulk' && deleteModalState.ids) {
-      const idsToDelete = deleteModalState.ids;
-      await bulkDeleteInvoices(idsToDelete);
-      setInvoices((prev) => prev.filter((i) => !idsToDelete.includes(i.id)));
-      if (activeInvoice && idsToDelete.includes(activeInvoice.id)) {
-        setActiveInvoice(null);
-      }
-      setDeleteModalState({ isOpen: false, mode: 'bulk', ids: [] });
-      notify('success', `${idsToDelete.length} facturas y ficheros eliminados.`, 'Lote Eliminado');
+    } catch (err: any) {
+      console.error('Error al eliminar facturas:', err);
+      notify('error', err.message || 'Error al eliminar factura(s).', 'Fallo al Eliminar');
+      throw err;
+    } finally {
+      setDeleteModalState({ isOpen: false, mode: 'single', ids: [] });
       if (selectedCompanyId) {
         fetchInvoices({ companyId: selectedCompanyId }).then((fresh) => setInvoices(fresh)).catch(() => {});
       }
@@ -387,6 +397,9 @@ export default function AppSuitePage() {
         plan_cuentas_longitud: newCompanyPlanLong,
         storage_base_path: newCompanyStorageBase.trim() || 'storage',
         iva_periodicity: newCompanyIvaPeriod,
+        modalidad_uso: newCompanyModalidad,
+        software_destino: newCompanySoftwareDestino,
+        regimen_tributario: newCompanyRegimen,
       });
       setCompanies((prev) => [...prev, created]);
       setSelectedCompanyId(created.id);
@@ -395,6 +408,9 @@ export default function AppSuitePage() {
       setNewCompanyRazon('');
       setNewCompanyStorageBase('storage');
       setNewCompanyIvaPeriod('Trimestral');
+      setNewCompanyModalidad('copiloto_contable');
+      setNewCompanySoftwareDestino('a3');
+      setNewCompanyRegimen('general');
       notify('success', `Empresa '${created.razon_social}' creada correctamente.`, 'Empresa Creada');
     } catch (err: any) {
       setNewCompanyError(err.message || 'Error al crear la empresa');
@@ -502,10 +518,21 @@ export default function AppSuitePage() {
             </h2>
 
             {selectedCompany && (
-              <span className="hidden md:inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                {selectedCompany.razon_social} ({selectedCompany.cif})
-              </span>
+              <div className="hidden md:inline-flex items-center gap-2 shrink-0">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-xs font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                  {selectedCompany.razon_social} ({selectedCompany.cif})
+                </span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                  selectedCompany.modalidad_uso === 'erp_completo'
+                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                    : 'bg-cyan-50 text-cyan-700 border-cyan-200'
+                }`}>
+                  {selectedCompany.modalidad_uso === 'erp_completo'
+                    ? 'MODALIDAD A: ERP'
+                    : `MODALIDAD B: COPILOTO (${(selectedCompany.software_destino || 'A3').toUpperCase()})`}
+                </span>
+              </div>
             )}
           </div>
 
@@ -964,34 +991,69 @@ export default function AppSuitePage() {
                 />
               </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Longitud de Subcuentas (PGC)
-                </label>
-                <select
-                  value={newCompanyPlanLong}
-                  onChange={(e) => setNewCompanyPlanLong(Number(e.target.value))}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none"
-                >
-                  <option value={9}>9 dígitos (Estándar recomendado)</option>
-                  <option value={8}>8 dígitos</option>
-                  <option value={10}>10 dígitos</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Modalidad de Trabajo *
+                  </label>
+                  <select
+                    value={newCompanyModalidad}
+                    onChange={(e) => setNewCompanyModalidad(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
+                  >
+                    <option value="copiloto_contable">Modalidad B: Copiloto (Enlace ERP)</option>
+                    <option value="erp_completo">Modalidad A: ERP Completo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Software Contable Enlace
+                  </label>
+                  <select
+                    value={newCompanySoftwareDestino}
+                    onChange={(e) => setNewCompanySoftwareDestino(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
+                  >
+                    <option value="a3">Wolters Kluwer A3 (SUENLACE.DAT)</option>
+                    <option value="contasol">Software DELSOL Contasol</option>
+                    <option value="sage">Sage 50 / Despachos Connected</option>
+                    <option value="holded">Holded</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Periodicidad de Liquidación de IVA (Modelo 303)
-                </label>
-                <select
-                  value={newCompanyIvaPeriod}
-                  onChange={(e) => setNewCompanyIvaPeriod(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="Trimestral">Trimestral (T1, T2, T3, T4 - Régimen General)</option>
-                  <option value="Mensual">Mensual (REDEME / SII)</option>
-                  <option value="Anual">Anual</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Longitud Subcuentas (PGC)
+                  </label>
+                  <select
+                    value={newCompanyPlanLong}
+                    onChange={(e) => setNewCompanyPlanLong(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
+                  >
+                    <option value={9}>9 dígitos (Estándar)</option>
+                    <option value={8}>8 dígitos</option>
+                    <option value={10}>10 dígitos</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-medium text-slate-700 mb-1">
+                    Liquidación de IVA
+                  </label>
+                  <select
+                    value={newCompanyIvaPeriod}
+                    onChange={(e) => setNewCompanyIvaPeriod(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
+                  >
+                    <option value="Trimestral">Trimestral (T1..T4)</option>
+                    <option value="Mensual">Mensual (SII/REDEME)</option>
+                    <option value="Anual">Anual</option>
+                  </select>
+                </div>
               </div>
 
               <div>
@@ -1003,7 +1065,7 @@ export default function AppSuitePage() {
                   value={newCompanyStorageBase}
                   onChange={(e) => setNewCompanyStorageBase(e.target.value)}
                   placeholder="storage"
-                  className="w-full px-3 py-2 border rounded-xl font-mono focus:ring-1 focus:ring-indigo-500 outline-none"
+                  className="w-full px-3 py-2 border rounded-xl font-mono focus:ring-1 focus:ring-indigo-500 outline-none text-xs"
                 />
               </div>
 

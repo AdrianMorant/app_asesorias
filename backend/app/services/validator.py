@@ -404,13 +404,16 @@ async def validate_invoice_integrity(
                 message=msg
             ))
 
-    # Control informativo de Modelo 347 (>3.000 €)
+    # Control preventivo de Modelo 347 (>3.000 €)
     if total_dec > Decimal("3000.00"):
+        has_yellow = True
+        msg_347 = f"Operación relevante para Modelo 347 (importe superior a 3.000 €: {total_dec:,.2f} €). Requiere confirmación."
+        reasons.append(msg_347)
         rule_details.append(RuleCheckDetail(
             rule_name="AVISO_MODELO_347",
             severity=TrafficLightStatus.YELLOW if not has_red else TrafficLightStatus.RED,
-            passed=True,
-            message=f"Operación relevante para Modelo 347 (>3.000 €: {total_dec:,.2f} €)."
+            passed=False,
+            message=msg_347
         ))
 
     # -------------------------------------------------------------------------

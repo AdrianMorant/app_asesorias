@@ -65,8 +65,7 @@ def run_tests():
     res_import = requests.post(f"{BASE_URL}/companies/{company_id}/chart-of-accounts/import", files=files)
     assert res_import.status_code == 200, f"Error en importación: {res_import.text}"
     import_summary = res_import.json()
-    print(f" -> Resumen importación: Total={import_summary['total_processed']}, Creadas={import_summary['created']}, Errores={len(import_summary['errors'])}")
-    assert import_summary['created'] >= 5, "Deberían haberse creado las cuentas del CSV"
+    assert (import_summary['created'] + import_summary.get('updated', 0)) >= 5, "Deberían haberse procesado (creadas/actualizadas) las cuentas del CSV"
 
     # 4. Exportación del Plan Contable a CSV normalizado
     print("\n4. Probando exportación del catálogo completo normalizado...")

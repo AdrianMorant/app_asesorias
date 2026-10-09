@@ -51,7 +51,14 @@ async def create_company(
         razon_social=payload.razon_social,
         plan_cuentas_longitud=payload.plan_cuentas_longitud,
         storage_base_path=payload.storage_base_path or "storage",
-        iva_periodicity=payload.iva_periodicity or "Trimestral"
+        iva_periodicity=payload.iva_periodicity or "Trimestral",
+        modalidad_uso=payload.modalidad_uso or "copiloto_contable",
+        regimen_tributario=payload.regimen_tributario or "general",
+        software_destino=payload.software_destino or "a3",
+        domicilio_fiscal=payload.domicilio_fiscal.strip() if payload.domicilio_fiscal else None,
+        email_contacto=payload.email_contacto.strip() if payload.email_contacto else None,
+        telefono_contacto=payload.telefono_contacto.strip() if payload.telefono_contacto else None,
+        is_active=True,
     )
     db.add(company)
     await db.commit()
@@ -87,7 +94,7 @@ async def update_company(
     payload: CompanyUpdateDTO,
     db: AsyncSession = Depends(get_db)
 ):
-    """Edita los datos de la empresa: razón social, dígitos de cuentas, ruta de almacenamiento o periodicidad de IVA."""
+    """Edita los datos de la empresa: razón social, dígitos de cuentas, ruta de almacenamiento, periodicidad de IVA, modalidad o software de destino."""
     res = await db.execute(select(Company).where(Company.id == company_id))
     company = res.scalars().first()
     if not company:
@@ -101,6 +108,20 @@ async def update_company(
         company.storage_base_path = payload.storage_base_path.strip()
     if payload.iva_periodicity is not None:
         company.iva_periodicity = payload.iva_periodicity.strip()
+    if payload.modalidad_uso is not None:
+        company.modalidad_uso = payload.modalidad_uso.strip()
+    if payload.regimen_tributario is not None:
+        company.regimen_tributario = payload.regimen_tributario.strip()
+    if payload.software_destino is not None:
+        company.software_destino = payload.software_destino.strip()
+    if payload.domicilio_fiscal is not None:
+        company.domicilio_fiscal = payload.domicilio_fiscal.strip() if payload.domicilio_fiscal else None
+    if payload.email_contacto is not None:
+        company.email_contacto = payload.email_contacto.strip() if payload.email_contacto else None
+    if payload.telefono_contacto is not None:
+        company.telefono_contacto = payload.telefono_contacto.strip() if payload.telefono_contacto else None
+    if payload.is_active is not None:
+        company.is_active = payload.is_active
 
     await db.commit()
     await db.refresh(company)
