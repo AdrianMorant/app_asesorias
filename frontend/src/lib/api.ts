@@ -23,8 +23,33 @@ import {
   NextSubaccountResponse,
 } from '@/types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
-const BACKEND_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || '';
+/**
+ * Resolucion dinamica de la URL base del API.
+ * En Server Functions / SSR, utiliza la vinculacion interna BACKEND_URL inyectada por Vercel Services.
+ * En el navegador del cliente o fallback local, utiliza NEXT_PUBLIC_API_URL o la ruta relativa '/api/v1'.
+ */
+export function getApiBase(): string {
+  if (typeof window === 'undefined' && process.env.BACKEND_URL) {
+    return `${process.env.BACKEND_URL.replace(/\/$/, '')}/api/v1`;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+}
+
+export function getBackendBase(): string {
+  if (typeof window === 'undefined' && process.env.BACKEND_URL) {
+    return process.env.BACKEND_URL.replace(/\/$/, '');
+  }
+  return process.env.NEXT_PUBLIC_BACKEND_URL || '';
+}
+
+export const API_BASE = {
+  toString: () => getApiBase(),
+} as unknown as string;
+
+export const BACKEND_BASE = {
+  toString: () => getBackendBase(),
+} as unknown as string;
+
 
 // -------------------------------------------------------------
 // EMPRESAS
