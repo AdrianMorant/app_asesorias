@@ -346,11 +346,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 : 'bg-slate-900 border-slate-700 hover:border-slate-600 focus:ring-1 focus:ring-slate-500'
             }`}
           >
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.razon_social} ({c.cif})
-              </option>
-            ))}
+            {companies.length === 0 ? (
+              <option value="">Sin empresas registradas</option>
+            ) : (
+              companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.razon_social} ({c.cif})
+                </option>
+              ))
+            )}
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>

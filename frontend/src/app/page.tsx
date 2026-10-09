@@ -133,37 +133,66 @@ export default function AppSuitePage() {
   // Modal Maquetador Visual Multi-Factura (MF)
   const [splitModalInvoice, setSplitModalInvoice] = useState<Invoice | null>(null);
   const [isSplitModalOpen, setIsSplitModalOpen] = useState<boolean>(false);
+  const [isBackendOffline, setIsBackendOffline] = useState<boolean>(false);
 
-  // Carga inicial
+  // Carga inicial resiliente con timeout de seguridad
   const loadInitialData = async () => {
     setLoading(true);
+    setIsBackendOffline(false);
     try {
-      const comps = await fetchCompanies();
-      setCompanies(comps);
+      // Timeout de 5s para garantizar que la interfaz se libere incluso si el backend está caído o bloqueado
+      const timeoutPromise = new Promise<Company[]>((resolve) =>
+        setTimeout(() => resolve([]), 5000)
+      );
+
+      const comps = await Promise.race([
+        fetchCompanies().catch((err) => {
+          console.warn('Fallo al obtener empresas:', err);
+          return [] as Company[];
+        }),
+        timeoutPromise,
+      ]);
+
+      const safeComps = Array.isArray(comps) ? comps : [];
+      setCompanies(safeComps);
+
+      if (safeComps.length === 0) {
+        setIsBackendOffline(true);
+      }
 
       let currentCompanyId = selectedCompanyId;
-      if (!currentCompanyId && comps.length > 0) {
-        currentCompanyId = comps[0].id;
+      if (!currentCompanyId && safeComps.length > 0) {
+        currentCompanyId = safeComps[0].id;
         setSelectedCompanyId(currentCompanyId);
-      } else if (comps.length > 0 && !comps.some((c) => c.id === currentCompanyId)) {
-        currentCompanyId = comps[0].id;
+      } else if (safeComps.length > 0 && !safeComps.some((c) => c.id === currentCompanyId)) {
+        currentCompanyId = safeComps[0].id;
         setSelectedCompanyId(currentCompanyId);
       }
 
       if (currentCompanyId) {
         const [supps, invs, sls] = await Promise.all([
-          fetchSuppliers(currentCompanyId),
-          fetchInvoices({ companyId: currentCompanyId }),
+          fetchSuppliers(currentCompanyId).catch(() => []),
+          fetchInvoices({ companyId: currentCompanyId }).catch(() => []),
           fetchSalesInvoices(currentCompanyId).catch(() => []),
         ]);
-        setSuppliers(supps);
-        setInvoices(invs);
-        setSales(sls);
+        setSuppliers(Array.isArray(supps) ? supps : []);
+        setInvoices(Array.isArray(invs) ? invs : []);
+        setSales(Array.isArray(sls) ? sls : []);
+      } else {
+        setSuppliers([]);
+        setInvoices([]);
+        setSales([]);
       }
     } catch (err) {
       console.error('Error cargando datos iniciales:', err);
-      notify('error', 'Error al sincronizar datos con el backend.');
+      setIsBackendOffline(true);
+      setCompanies([]);
+      setSuppliers([]);
+      setInvoices([]);
+      setSales([]);
+      notify('info', 'El backend no respondió de inmediato. La interfaz continúa operativa con datos locales seguros.');
     } finally {
+      // Garantizar que loading pase a false bajo cualquier circunstancia
       setLoading(false);
     }
   };
@@ -172,31 +201,47 @@ export default function AppSuitePage() {
     loadInitialData();
   }, []);
 
-  // Recarga al cambiar de empresa
+  // Recarga al cambiar de empresa con resiliencia total
   useEffect(() => {
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId) {
+      setRefreshing(false);
+      return;
+    }
+    let isCancelled = false;
+
     const reloadForCompany = async () => {
       setRefreshing(true);
       try {
         const [supps, invs, sls] = await Promise.all([
-          fetchSuppliers(selectedCompanyId),
-          fetchInvoices({ companyId: selectedCompanyId }),
+          fetchSuppliers(selectedCompanyId).catch(() => []),
+          fetchInvoices({ companyId: selectedCompanyId }).catch(() => []),
           fetchSalesInvoices(selectedCompanyId).catch(() => []),
         ]);
-        setSuppliers(supps);
-        setInvoices(invs);
-        setSales(sls);
-        if (activeInvoice && activeInvoice.company_id !== selectedCompanyId) {
-          setActiveInvoice(null);
+        if (!isCancelled) {
+          setSuppliers(Array.isArray(supps) ? supps : []);
+          setInvoices(Array.isArray(invs) ? invs : []);
+          setSales(Array.isArray(sls) ? sls : []);
+          if (activeInvoice && activeInvoice.company_id !== selectedCompanyId) {
+            setActiveInvoice(null);
+          }
         }
       } catch (err) {
         console.error('Error al cambiar de empresa:', err);
-        notify('error', 'Error cargando datos de la empresa.');
+        if (!isCancelled) {
+          notify('error', 'Error al sincronizar datos de la empresa.');
+        }
       } finally {
-        setRefreshing(false);
+        if (!isCancelled) {
+          setRefreshing(false);
+        }
       }
     };
+
     reloadForCompany();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [selectedCompanyId]);
 
   // Manejo de eventos de facturas recibidas
@@ -546,13 +591,60 @@ export default function AppSuitePage() {
 
         {/* Contenedor con scroll para cada módulo */}
         <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-          {!selectedCompany ? (
-            <div className="p-16 text-center text-slate-400 bg-white rounded-xl border border-slate-200">
-              <Building2 className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-              <p className="text-sm font-semibold text-slate-700">No hay empresa cliente seleccionada</p>
-              <p className="text-xs text-slate-400 mt-1">
-                Crea o selecciona una empresa desde el menú lateral para comenzar.
+          {loading ? (
+            <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-8 animate-in fade-in duration-200">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center mb-4 shadow-sm">
+                <RefreshCw className="w-6 h-6 text-indigo-600 animate-spin" />
+              </div>
+              <h3 className="text-sm font-bold text-slate-800 mb-1">
+                Sincronizando con KontaAI Suite...
+              </h3>
+              <p className="text-xs text-slate-400 max-w-sm">
+                Inicializando espacio contable, comprobando empresas y reglas fiscales.
               </p>
+            </div>
+          ) : !selectedCompany ? (
+            <div className="max-w-2xl mx-auto my-6 p-8 sm:p-10 text-center bg-white rounded-2xl border border-slate-200/90 shadow-sm animate-in fade-in duration-200">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                <Building2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900 mb-2">
+                Bienvenido a KontaAI Suite para Asesorías
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
+                Para comenzar a contabilizar facturas y liquidar modelos tributarios, crea una empresa cliente o explora la demostración interactiva guiada.
+              </p>
+
+              {isBackendOffline && (
+                <div className="mb-6 mx-auto max-w-lg flex items-center gap-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium text-left">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>El servidor backend está en espera (http://127.0.0.1:8000). Puedes interactuar con la demo guiada y la interfaz mientras se conecta.</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => setShowNewCompanyModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm shadow-indigo-600/20 transition-all active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Crear Primera Empresa</span>
+                </button>
+                <button
+                  onClick={() => setIsDemoModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-bold shadow-sm shadow-cyan-600/20 transition-all active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-cyan-200" />
+                  <span>Probar Demo Guiada (1 min)</span>
+                </button>
+                <button
+                  onClick={loadInitialData}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all active:scale-95"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Reintentar Conexión</span>
+                </button>
+              </div>
             </div>
           ) : (
             <>

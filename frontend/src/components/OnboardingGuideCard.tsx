@@ -38,6 +38,7 @@ export const OnboardingGuideCard: React.FC<OnboardingGuideCardProps> = ({
 
   // Inicializar estado desde localStorage
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored === 'true') {
@@ -69,19 +70,23 @@ export const OnboardingGuideCard: React.FC<OnboardingGuideCardProps> = ({
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    try {
-      localStorage.setItem(STORAGE_KEY, 'true');
-    } catch {
-      // Ignore
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, 'true');
+      } catch {
+        // Ignore
+      }
     }
   };
 
   const handleRestore = () => {
     setIsDismissed(false);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // Ignore
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // Ignore
+      }
     }
   };
 
@@ -212,9 +217,11 @@ export const OnboardingGuideCard: React.FC<OnboardingGuideCardProps> = ({
               <button
                 onClick={() => {
                   setBankConnected(true);
-                  try {
-                    localStorage.setItem('konta_bank_connected', 'true');
-                  } catch {}
+                  if (typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem('konta_bank_connected', 'true');
+                    } catch {}
+                  }
                 }}
                 className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 underline"
               >

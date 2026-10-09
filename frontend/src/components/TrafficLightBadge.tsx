@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { TrafficLightStatus } from '@/types';
 import { CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';

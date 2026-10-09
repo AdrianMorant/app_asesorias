@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, status, Body
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -109,7 +109,8 @@ async def update_company(
 @router.delete("/{company_id}")
 async def delete_company(
     company_id: str,
-    cif_confirmation: str = Query(..., description="Confirmación tecleando el CIF de la empresa"),
+    cif_confirmation: Optional[str] = Query(None, description="Confirmación tecleando el CIF de la empresa"),
+    payload: Optional[dict] = Body(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -117,6 +118,13 @@ async def delete_company(
     Borra en cascada facturas, asientos, proveedores, catálogo contable
     y elimina físicamente los archivos del disco para evitar huérfanos.
     """
+    token_confirmation = cif_confirmation or (payload.get("cif_confirmation") if isinstance(payload, dict) else None)
+    if not token_confirmation:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe proporcionar 'cif_confirmation' como parámetro de consulta o en el cuerpo JSON."
+        )
+
     res = await db.execute(
         select(Company)
         .where(Company.id == company_id)
@@ -127,7 +135,7 @@ async def delete_company(
         raise HTTPException(status_code=404, detail="Empresa no encontrada.")
 
     # Validación de seguridad estricta
-    if normalize_nif(cif_confirmation) != normalize_nif(company.cif):
+    if normalize_nif(token_confirmation) != normalize_nif(company.cif):
         raise HTTPException(
             status_code=400,
             detail=f"Confirmación incorrecta. Debe escribir exactamente el CIF '{company.cif}' para confirmar la eliminación."

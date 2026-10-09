@@ -1,5 +1,5 @@
 from typing import AsyncGenerator
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,

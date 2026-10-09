@@ -60,6 +60,7 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
 
   // Cargar notificaciones leídas de localStorage
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     try {
       const stored = localStorage.getItem(STORAGE_READ_NOTIFICATIONS_KEY);
       if (stored) {
@@ -72,10 +73,12 @@ export const NotificationCenterDrawer: React.FC<NotificationCenterDrawerProps> =
 
   const saveReadIds = (newReadIds: string[]) => {
     setReadIds(newReadIds);
-    try {
-      localStorage.setItem(STORAGE_READ_NOTIFICATIONS_KEY, JSON.stringify(newReadIds));
-    } catch {
-      // Ignorar
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_READ_NOTIFICATIONS_KEY, JSON.stringify(newReadIds));
+      } catch {
+        // Ignorar
+      }
     }
   };
 
