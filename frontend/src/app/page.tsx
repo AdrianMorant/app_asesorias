@@ -28,6 +28,7 @@ import { TaxModelsView } from '@/components/TaxModelsView';
 import { TaxDashboardView } from '@/components/TaxDashboardView';
 import { IntegrationsView } from '@/components/IntegrationsView';
 import { BankReconciliationView } from '@/components/BankReconciliationView';
+import { AdvisorPortalView } from '@/components/AdvisorPortalView';
 
 // Componentes de Ingesta IA y Split-screen
 import { UploadDropzone } from '@/components/UploadDropzone';
@@ -721,6 +722,18 @@ export default function AppSuitePage() {
                       fetchInvoices({ companyId: selectedCompanyId }).then((invs) => setInvoices(invs));
                     }
                   }}
+                />
+              )}
+
+              {/* VISTA 9: PORTAL DEL ASESOR Y SUPERVISIÓN MULTI-TENANT */}
+              {currentTab === 'advisor' && (
+                <AdvisorPortalView
+                  currentCompanyId={selectedCompanyId}
+                  onSelectCompany={(newCompanyId) => {
+                    setSelectedCompanyId(newCompanyId);
+                    setCurrentTab('dashboard');
+                  }}
+                  onNotify={notify}
                 />
               )}
             </>

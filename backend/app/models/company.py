@@ -25,3 +25,5 @@ class Company(Base):
     export_batches = relationship("ExportBatch", back_populates="company", cascade="all, delete-orphan")
     contacts = relationship("Contact", back_populates="company", cascade="all, delete-orphan")
     sales_invoices = relationship("SalesInvoice", back_populates="company", cascade="all, delete-orphan")
+    users = relationship("User", secondary="user_companies", back_populates="companies")
+

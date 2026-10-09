@@ -11,6 +11,9 @@ from app.api.v1.endpoints import (
     taxes,
     journal,
     banking,
+    two_factor,
+    webhooks,
+    advisor,
 )
 
 api_router = APIRouter()
@@ -28,4 +31,15 @@ api_router.include_router(sales.router, prefix="/companies", tags=["Ventas y Fac
 api_router.include_router(taxes.router, prefix="/companies", tags=["Impuestos y Modelos Tributarios"])
 api_router.include_router(journal.router, prefix="/companies", tags=["Libro Diario, Mayor y Sumas y Saldos"])
 api_router.include_router(banking.router, prefix="/companies", tags=["Conciliación Bancaria Inteligente"])
+
+# Seguridad Avanzada y Autenticación de Dos Factores (TOTP RFC 6238)
+api_router.include_router(two_factor.router, prefix="/auth/2fa", tags=["Autenticación y Seguridad 2FA"])
+
+# Ingesta y Webhooks Inbound (SendGrid, Postmark, Mailgun)
+api_router.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks Inbound y Automatización"])
+
+# Portal Asesor y Gestión Multi-Tenant
+api_router.include_router(advisor.router, prefix="/advisor", tags=["Portal Asesor y Supervisión Multi-Tenant"])
+
+
 

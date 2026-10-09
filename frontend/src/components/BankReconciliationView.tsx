@@ -22,6 +22,11 @@ import {
   Building2,
   Receipt,
   Scale,
+  Upload,
+  Download,
+  Send,
+  CreditCard,
+  FileDown,
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -89,6 +94,26 @@ export const BankReconciliationView: React.FC<BankReconciliationViewProps> = ({
   const [reconciling, setReconciling] = useState<boolean>(false);
   const [editCounterpart, setEditCounterpart] = useState<string>('');
   const [editBankAccount, setEditBankAccount] = useState<string>('57200000');
+
+  // Estados Modal PSD2
+  const [showPSD2Modal, setShowPSD2Modal] = useState<boolean>(false);
+  const [selectedBank, setSelectedBank] = useState<string>('SANTANDER_ES');
+  const [psd2Connecting, setPsd2Connecting] = useState<boolean>(false);
+
+  // Estados Modal Norma 43
+  const [showNorma43Modal, setShowNorma43Modal] = useState<boolean>(false);
+  const [norma43File, setNorma43File] = useState<File | null>(null);
+  const [norma43Uploading, setNorma43Uploading] = useState<boolean>(false);
+  const [norma43Result, setNorma43Result] = useState<any | null>(null);
+
+  // Estados Modal SEPA
+  const [showSepaModal, setShowSepaModal] = useState<boolean>(false);
+  const [sepaType, setSepaType] = useState<'19' | '34'>('19');
+  const [sepaParty, setSepaParty] = useState<string>('Cliente de Ejemplo SL');
+  const [sepaIban, setSepaIban] = useState<string>('ES9121000418450200051332');
+  const [sepaAmount, setSepaAmount] = useState<number>(1250.0);
+  const [sepaConcept, setSepaConcept] = useState<string>('Remesa Cobro Factura F2026-001');
+  const [generatingSepa, setGeneratingSepa] = useState<boolean>(false);
 
   // Cargar transacciones desde el backend
   const loadTransactions = async () => {
@@ -262,7 +287,31 @@ export const BankReconciliationView: React.FC<BankReconciliationViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setShowPSD2Modal(true)}
+            className="flex items-center gap-1.5 text-xs text-indigo-700 font-bold px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 transition-colors shadow-sm"
+          >
+            <Building2 className="w-3.5 h-3.5 text-indigo-600" />
+            Conectar Banco (PSD2)
+          </button>
+
+          <button
+            onClick={() => setShowNorma43Modal(true)}
+            className="flex items-center gap-1.5 text-xs text-slate-700 font-bold px-3 py-2 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <Upload className="w-3.5 h-3.5 text-slate-600" />
+            Subir Norma 43
+          </button>
+
+          <button
+            onClick={() => setShowSepaModal(true)}
+            className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold px-3 py-2 rounded-lg border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100 transition-colors shadow-sm"
+          >
+            <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+            Remesas SEPA (19/34)
+          </button>
+
           <button
             onClick={loadTransactions}
             disabled={loading}
@@ -758,6 +807,350 @@ export const BankReconciliationView: React.FC<BankReconciliationViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* 4. MODAL PSD2: Conectar Entidad Bancaria */}
+      {showPSD2Modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-5">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+                  <Building2 className="w-5 h-5" />
+                </span>
+                <h3 className="text-base font-bold text-slate-900">Conexión Bancaria PSD2</h3>
+              </div>
+              <button onClick={() => setShowPSD2Modal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Conexión directa vía GoCardless Bank Data API conforme a la directiva europea PSD2 / RTS.
+              Selecciona tu entidad financiera para autorizar el consentimiento bancario seguro de 90 días:
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">
+                Entidad Financiera (España)
+              </label>
+              <select
+                value={selectedBank}
+                onChange={(e) => setSelectedBank(e.target.value)}
+                className="w-full text-xs font-semibold px-3 py-2.5 border rounded-lg bg-slate-50 focus:bg-white outline-none"
+              >
+                <option value="SANTANDER_ES">Banco Santander (SANTANDER_ES)</option>
+                <option value="BBVA_ES">BBVA España (BBVA_ES)</option>
+                <option value="CAIXABANK_ES">CaixaBank (CAIXABANK_ES)</option>
+                <option value="SABADELL_ES">Banco Sabadell (SABADELL_ES)</option>
+                <option value="BANKINTER_ES">Bankinter (BANKINTER_ES)</option>
+                <option value="ABANCA_ES">Abanca (ABANCA_ES)</option>
+              </select>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-amber-600" /> Criptografía y Seguridad Bancaria
+              </div>
+              <div>No almacenamos contraseñas. La autenticación se realiza en el portal oficial del banco.</div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                onClick={() => setShowPSD2Modal(false)}
+                className="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={psd2Connecting}
+                onClick={async () => {
+                  setPsd2Connecting(true);
+                  try {
+                    const res = await fetch(`${API_BASE}/companies/${company.id}/banking/connect`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        institution_id: selectedBank,
+                        redirect_uri: window.location.href,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.initiation_url) {
+                      onNotify('info', 'Redirigiendo a la pasarela bancaria segura...', 'PSD2 Connect');
+                      window.location.href = data.initiation_url;
+                    } else {
+                      onNotify('success', 'Consentimiento registrado correctamente.', 'PSD2');
+                      setShowPSD2Modal(false);
+                    }
+                  } catch (err: any) {
+                    onNotify('error', err.message || 'Error iniciando conexión PSD2');
+                  } finally {
+                    setPsd2Connecting(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-sm"
+              >
+                {psd2Connecting ? 'Iniciando...' : 'Autorizar en Banca Online'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL NORMA 43: Subida de Cuaderno Bancario */}
+      {showNorma43Modal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden p-6 space-y-5">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-slate-100 text-slate-700 rounded-lg">
+                  <Upload className="w-5 h-5" />
+                </span>
+                <h3 className="text-base font-bold text-slate-900">Importar Extracto Norma 43</h3>
+              </div>
+              <button onClick={() => setShowNorma43Modal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500">
+              Carga archivos oficiales de extractos bancarios del Consejo Superior Bancario (CSB 43 / Norma 43) en formato plano (.n43, .txt).
+            </p>
+
+            <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center space-y-2 hover:border-indigo-400 transition-colors bg-slate-50">
+              <input
+                type="file"
+                accept=".n43,.txt,.csb"
+                onChange={(e) => setNorma43File(e.target.files?.[0] || null)}
+                className="hidden"
+                id="norma43-input"
+              />
+              <label htmlFor="norma43-input" className="cursor-pointer block">
+                <FileCheck2 className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                <span className="text-xs font-bold text-slate-700 block">
+                  {norma43File ? norma43File.name : 'Haz clic para seleccionar el archivo Norma 43'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-1">
+                  Formatos admitidos: .n43, .txt (Registro tipo 11, 22, 23, 33, 88)
+                </span>
+              </label>
+            </div>
+
+            {norma43Result && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs space-y-1 text-emerald-900">
+                <div className="font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Extracto Cuadrado y Procesado
+                </div>
+                <div>{norma43Result.message}</div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                onClick={() => {
+                  setShowNorma43Modal(false);
+                  setNorma43Result(null);
+                  setNorma43File(null);
+                }}
+                className="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+              <button
+                disabled={!norma43File || norma43Uploading}
+                onClick={async () => {
+                  if (!norma43File) return;
+                  setNorma43Uploading(true);
+                  const fd = new FormData();
+                  fd.append('file', norma43File);
+                  try {
+                    const res = await fetch(`${API_BASE}/companies/${company.id}/upload-norma43`, {
+                      method: 'POST',
+                      body: fd,
+                    });
+                    if (!res.ok) throw new Error('Error al procesar archivo Norma 43');
+                    const data = await res.json();
+                    setNorma43Result(data);
+                    onNotify('success', data.message || 'Extracto Norma 43 procesado con éxito', 'Norma 43');
+                    loadTransactions();
+                  } catch (err: any) {
+                    onNotify('error', err.message || 'Error procesando Norma 43');
+                  } finally {
+                    setNorma43Uploading(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50"
+              >
+                {norma43Uploading ? 'Procesando...' : 'Validar y Cuadrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODAL REMESAS SEPA: Generador ISO 20022 */}
+      {showSepaModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
+                  <CreditCard className="w-5 h-5" />
+                </span>
+                <h3 className="text-base font-bold text-slate-900">Emisión de Remesas Bancarias SEPA XML</h3>
+              </div>
+              <button onClick={() => setShowSepaModal(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setSepaType('19')}
+                className={`p-3 rounded-xl border text-left text-xs ${
+                  sepaType === '19' ? 'border-indigo-600 bg-indigo-50/50 font-bold' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="text-indigo-700">Norma 19 (pain.008)</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Adeudos Directos / Cobro Clientes</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSepaType('34')}
+                className={`p-3 rounded-xl border text-left text-xs ${
+                  sepaType === '34' ? 'border-emerald-600 bg-emerald-50/50 font-bold' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="text-emerald-700">Norma 34 (pain.001)</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Transferencias / Pago Proveedores</div>
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                  {sepaType === '19' ? 'Cliente / Deudor' : 'Proveedor / Beneficiario'}
+                </label>
+                <input
+                  type="text"
+                  value={sepaParty}
+                  onChange={(e) => setSepaParty(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg outline-none bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                  IBAN (Validación Algorítmica MOD-97)
+                </label>
+                <input
+                  type="text"
+                  value={sepaIban}
+                  onChange={(e) => setSepaIban(e.target.value)}
+                  className="w-full px-3 py-2 font-mono border rounded-lg outline-none bg-slate-50 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                    Importe (€)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={sepaAmount}
+                    onChange={(e) => setSepaAmount(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 font-mono font-bold border rounded-lg outline-none bg-slate-50 focus:bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block mb-1">
+                    Concepto / Ref. Factura
+                  </label>
+                  <input
+                    type="text"
+                    value={sepaConcept}
+                    onChange={(e) => setSepaConcept(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg outline-none bg-slate-50 focus:bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                onClick={() => setShowSepaModal(false)}
+                className="px-4 py-2 border rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                disabled={generatingSepa || sepaAmount <= 0}
+                onClick={async () => {
+                  setGeneratingSepa(true);
+                  const endpoint =
+                    sepaType === '19'
+                      ? `${API_BASE}/companies/${company.id}/sepa/direct-debit-remittance`
+                      : `${API_BASE}/companies/${company.id}/sepa/credit-transfer-remittance`;
+
+                  const body =
+                    sepaType === '19'
+                      ? {
+                          debits: [
+                            {
+                              debtor_name: sepaParty,
+                              debtor_iban: sepaIban,
+                              amount: sepaAmount,
+                              mandate_id: `MNDT-${company.cif}`,
+                              concept: sepaConcept,
+                            },
+                          ],
+                        }
+                      : {
+                          transfers: [
+                            {
+                              creditor_name: sepaParty,
+                              creditor_iban: sepaIban,
+                              amount: sepaAmount,
+                              concept: sepaConcept,
+                            },
+                          ],
+                        };
+
+                  try {
+                    const res = await fetch(endpoint, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(body),
+                    });
+                    if (!res.ok) throw new Error('Error generando remesa SEPA XML');
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `remesa_sepa_${sepaType}_${new Date().toISOString().slice(0, 10)}.xml`;
+                    a.click();
+                    onNotify('success', 'Archivo SEPA XML ISO 20022 generado y descargado correctamente.', 'SEPA');
+                    setShowSepaModal(false);
+                  } catch (err: any) {
+                    onNotify('error', err.message || 'Fallo en validación SEPA');
+                  } finally {
+                    setGeneratingSepa(false);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                {generatingSepa ? 'Generando...' : 'Descargar SEPA XML'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

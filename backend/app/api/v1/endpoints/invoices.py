@@ -3,15 +3,18 @@ import hashlib
 import mimetypes
 from datetime import datetime, date
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status, Response
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status, Response, Request
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.file_encryption import save_encrypted_file, read_decrypted_file, decrypt_file_bytes
+from app.core.audit_logger import log_security_event
+from app.core.file_inspector import inspect_file_bytes, sanitize_filename, FileSecurityViolationError
 from app.models.company import Company
 from app.models.supplier import Supplier
 from app.models.invoice import Invoice, InvoiceTaxBreakdown
@@ -51,6 +54,38 @@ ALLOWED_MIME_TYPES = {
     "image/webp"
 }
 
+
+def read_invoice_bytes_with_fallback(file_path: Union[str, Path]) -> bytes:
+    """Lee un archivo de factura descifrándolo en memoria al vuelo (AES-256-GCM).
+    
+    Proporciona tolerancia y retrocompatibilidad total:
+    Si el archivo ya estaba almacenado en texto plano (previo al cifrado en reposo
+    o con cabecera estándar %PDF-), se retorna directamente como fallback sin fallar.
+    De lo contrario, se descifra de forma segura con AES-256-GCM.
+    """
+    path = Path(file_path).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Archivo físico no encontrado: {path}")
+
+    with open(path, "rb") as f:
+        data = f.read()
+
+    # Tolerancia/retrocompatibilidad: si ya era un PDF en claro o imagen sin cifrar
+    if (
+        data.startswith(b"%PDF-")
+        or data.startswith(b"\x89PNG")
+        or data.startswith(b"\xff\xd8")
+        or data.startswith(b"RIFF")
+    ):
+        return data
+
+    try:
+        return decrypt_file_bytes(data)
+    except Exception:
+        # Fallback de seguridad si no era descifrable pero es legible
+        return data
+
+
 @router.post("/upload", response_model=InvoiceResponseDTO, status_code=status.HTTP_201_CREATED)
 async def upload_and_process_invoice(
     file: UploadFile = File(..., description="Fichero de factura en formato PDF o imagen (PNG/JPEG)"),
@@ -86,15 +121,24 @@ async def upload_and_process_invoice(
             await db.commit()
             await db.refresh(company)
 
-    # 2. Validar tipo de archivo
+    # 2. Validar tipo de archivo y seguridad binaria profunda
     file_bytes = await file.read()
     if not file_bytes:
         raise HTTPException(status_code=400, detail="El archivo subido está vacío.")
+
+    try:
+        inspection = inspect_file_bytes(file_bytes, file.filename or "factura.pdf")
+        safe_filename = inspection["filename"]
+    except FileSecurityViolationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Archivo rechazado por seguridad: {str(exc)}"
+        )
     
     mime_type = file.content_type
     if not mime_type or mime_type == "application/octet-stream":
-        guessed_type, _ = mimetypes.guess_type(file.filename)
-        mime_type = guessed_type or "application/pdf"
+        guessed_type, _ = mimetypes.guess_type(safe_filename)
+        mime_type = guessed_type or inspection.get("detected_mime_type") or "application/pdf"
     
     if mime_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
@@ -102,11 +146,12 @@ async def upload_and_process_invoice(
             detail=f"Formato no compatible ({mime_type}). Debe ser PDF o imagen (PNG, JPG, WEBP)."
         )
 
-    # 3. Guardar archivo en disco
-    unique_filename = f"{uuid.uuid4()}_{file.filename}"
+    # 3. Guardar archivo cifrado en disco mediante AES-256-GCM (Encryption at Rest)
+    orig_name = safe_filename
+    enc_name = orig_name if orig_name.endswith(".enc") else f"{orig_name}.enc"
+    unique_filename = f"{uuid.uuid4()}_{enc_name}"
     saved_file_path = settings.UPLOAD_DIR / unique_filename
-    with open(saved_file_path, "wb") as f:
-        f.write(file_bytes)
+    save_encrypted_file(saved_file_path, file_bytes)
 
     # 4.1 Cálculo del Hash SHA-256 del archivo para detección en tiempo real de duplicados
     file_hash = hashlib.sha256(file_bytes).hexdigest()
@@ -149,10 +194,11 @@ async def upload_and_process_invoice(
 
     # 5.1 Conteo de páginas e inspección de Multi-Factura (MF)
     num_paginas = 1
-    if mime_type == "application/pdf" or saved_file_path.suffix.lower() == ".pdf":
+    if mime_type == "application/pdf" or file.filename.lower().endswith(".pdf"):
         try:
             import pymupdf
-            pdf_doc = pymupdf.open(str(saved_file_path))
+            # Análisis del PDF directamente en memoria sin leer disco cifrado
+            pdf_doc = pymupdf.open(stream=file_bytes, filetype="pdf")
             num_paginas = len(pdf_doc)
             pdf_doc.close()
         except Exception:
@@ -345,6 +391,75 @@ async def get_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Factura no encontrada.")
     return invoice
+
+
+@router.get("/{invoice_id}/file")
+@router.get("/{invoice_id}/download")
+async def get_invoice_file(
+    invoice_id: str,
+    download: bool = Query(False, description="Si es True, fuerza descarga como archivo adjunto"),
+    request: Request = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Descarga o visualiza en memoria el documento original descifrado al vuelo (AES-256-GCM).
+    
+    Descifra los bytes directamente en memoria sin dejar copias en texto plano en el servidor.
+    Cuenta con retrocompatibilidad automática si el archivo ya fue almacenado en claro previamente.
+    """
+    invoice = await db.get(Invoice, invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Factura no encontrada.")
+
+    if not invoice.file_path:
+        raise HTTPException(status_code=404, detail="La factura no tiene una ruta de archivo asociada.")
+
+    file_p = Path(invoice.file_path)
+    if not file_p.exists():
+        raise HTTPException(status_code=404, detail="Archivo físico no encontrado en el servidor.")
+
+    try:
+        decrypted_bytes = read_decrypted_file(file_p)
+    except Exception:
+        # Tolerancia y retrocompatibilidad: si el archivo ya era un PDF en claro previo al cifrado
+        with open(file_p, "rb") as f:
+            raw_bytes = f.read()
+        if raw_bytes.startswith(b"%PDF-") or raw_bytes.startswith(b"\x89PNG") or raw_bytes.startswith(b"\xff\xd8"):
+            decrypted_bytes = raw_bytes
+        else:
+            try:
+                decrypted_bytes = decrypt_file_bytes(raw_bytes)
+            except Exception:
+                decrypted_bytes = raw_bytes
+
+    mime, _ = mimetypes.guess_type(invoice.file_name or str(file_p))
+    media_type = mime or "application/pdf"
+    disposition = "attachment" if download else "inline"
+    safe_filename = invoice.file_name or file_p.name
+    if safe_filename.endswith(".enc"):
+        safe_filename = safe_filename[:-4]
+
+    # Registro de auditoría de seguridad y trazabilidad RGPD / AEAT
+    action_type = "INVOICE_DOWNLOAD" if download else "INVOICE_VIEW"
+    log_security_event(
+        action=action_type,
+        resource_id=str(invoice_id),
+        request=request,
+        user_id=getattr(current_user, "id", None) if "current_user" in locals() else None,
+        empresa_id=str(getattr(invoice, "company_id", getattr(invoice, "empresa_id", None))) if "invoice" in locals() else None,
+        status="SUCCESS",
+        details={"filename": getattr(invoice, "file_name", None)}
+    )
+
+    return Response(
+        content=decrypted_bytes,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'{disposition}; filename="{safe_filename}"',
+            "Cache-Control": "private, no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        }
+    )
 
 
 @router.get("/companies/{company_id}/next-subaccount", response_model=NextSubaccountResponseDTO)
@@ -808,10 +923,11 @@ async def get_invoice_pages(
     file_p = Path(invoice.file_path)
     num_paginas = invoice.num_paginas or 1
 
-    if file_p.exists() and file_p.suffix.lower() == ".pdf":
+    if file_p.exists():
         try:
+            raw_bytes = read_invoice_bytes_with_fallback(file_p)
             import pymupdf
-            doc = pymupdf.open(str(file_p))
+            doc = pymupdf.open(stream=raw_bytes, filetype="pdf")
             num_paginas = len(doc)
             doc.close()
         except Exception:
@@ -851,33 +967,36 @@ async def get_page_thumbnail(
     if not file_p.exists():
         raise HTTPException(status_code=404, detail="Archivo físico no encontrado en el servidor")
 
-    if file_p.suffix.lower() == ".pdf":
-        try:
-            import pymupdf
-            doc = pymupdf.open(str(file_p))
-            if page_number < 1 or page_number > len(doc):
-                doc.close()
-                raise HTTPException(status_code=400, detail=f"Página {page_number} fuera de rango (1..{len(doc)})")
-            page = doc.load_page(page_number - 1)
-            pix = page.get_pixmap(dpi=120)
-            img_bytes = pix.tobytes("png")
+    try:
+        raw_bytes = read_invoice_bytes_with_fallback(file_p)
+        import pymupdf
+        doc = pymupdf.open(stream=raw_bytes, filetype="pdf")
+        if page_number < 1 or page_number > len(doc):
             doc.close()
-            return Response(content=img_bytes, media_type="image/png")
-        except HTTPException:
-            raise
+            raise HTTPException(status_code=400, detail=f"Página {page_number} fuera de rango (1..{len(doc)})")
+        page = doc.load_page(page_number - 1)
+        pix = page.get_pixmap(dpi=120)
+        img_bytes = pix.tobytes("png")
+        doc.close()
+        return Response(content=img_bytes, media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception:
+        # Fallback para imágenes directas (PNG/JPEG/WEBP)
+        try:
+            raw_bytes = read_invoice_bytes_with_fallback(file_p)
+            mime, _ = mimetypes.guess_type(invoice.file_name or str(file_p))
+            return Response(content=raw_bytes, media_type=mime or "image/jpeg")
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error renderizando página {page_number}: {str(e)}")
-    else:
-        with open(file_p, "rb") as f:
-            data = f.read()
-        mime, _ = mimetypes.guess_type(str(file_p))
-        return Response(content=data, media_type=mime or "image/jpeg")
+
 
 
 @router.post("/{invoice_id}/split", response_model=List[InvoiceResponseDTO])
 async def split_invoice(
     invoice_id: str,
     payload: SplitInvoiceRequestDTO,
+    request: Request = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -902,7 +1021,8 @@ async def split_invoice(
 
     import pymupdf
     try:
-        orig_doc = pymupdf.open(str(orig_path))
+        orig_bytes = read_invoice_bytes_with_fallback(orig_path)
+        orig_doc = pymupdf.open(stream=orig_bytes, filetype="pdf")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"No se pudo abrir el PDF original: {str(e)}")
 
@@ -933,15 +1053,14 @@ async def split_invoice(
 
             # Nombre oficial: [original]_factura_[index].pdf
             sub_clean_name = f"{clean_stem}_factura_{idx + 1}.pdf"
-            sub_unique_name = f"{uuid.uuid4()}_{sub_clean_name}"
+            sub_unique_name = f"{uuid.uuid4()}_{sub_clean_name}.enc"
             sub_file_path = settings.UPLOAD_DIR / sub_unique_name
 
-            sub_doc.save(str(sub_file_path))
+            # Obtener bytes del nuevo sub-documento en memoria y guardar cifrado
+            sub_bytes = sub_doc.tobytes()
             sub_doc.close()
 
-            # Leer bytes del nuevo sub-documento
-            with open(sub_file_path, "rb") as f:
-                sub_bytes = f.read()
+            save_encrypted_file(sub_file_path, sub_bytes)
 
             # Extracción con IA
             try:
@@ -1078,6 +1197,22 @@ async def split_invoice(
         )
         .order_by(Invoice.created_at.asc())
     )
+
+    # Registro de auditoría para la disgregación de documento
+    log_security_event(
+        action="INVOICE_SPLIT",
+        resource_id=str(invoice_id),
+        request=request,
+        user_id=getattr(current_user, "id", None) if "current_user" in locals() else None,
+        empresa_id=str(getattr(company, "id", getattr(orig_invoice, "company_id", None))) if "company" in locals() else None,
+        status="SUCCESS",
+        details={
+            "sub_invoices_count": len(created_sub_invoices),
+            "sub_invoice_ids": [inv.id for inv in created_sub_invoices],
+            "original_filename": orig_invoice.file_name,
+        }
+    )
+
     return final_res.scalars().all()
 
 

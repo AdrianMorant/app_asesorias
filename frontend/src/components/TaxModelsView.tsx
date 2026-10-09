@@ -14,7 +14,12 @@ import {
   Download,
   Building,
   ArrowRight,
+  ShieldAlert,
+  ShieldCheck,
+  FileDown,
 } from 'lucide-react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 interface TaxModelsViewProps {
   company: Company;
@@ -26,13 +31,20 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
   const [period, setPeriod] = useState<string>('1T');
   const [activeModel, setActiveModel] = useState<'303' | '111' | '115' | '347'>('303');
   const [taxData, setTaxData] = useState<TaxSummaryResponse | null>(null);
+  const [riskReport, setRiskReport] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await fetchTaxSummary(company.id, year, period);
-      setTaxData(res);
+      const [summaryRes, riskRes] = await Promise.all([
+        fetchTaxSummary(company.id, year, period),
+        fetch(`${API_BASE}/companies/${company.id}/audit-risk-score?year=${year}&period=${period}`).then((r) =>
+          r.ok ? r.json() : null
+        ),
+      ]);
+      setTaxData(summaryRes);
+      setRiskReport(riskRes);
     } catch {
       onNotify('error', 'Error al calcular la autoliquidación tributaria');
     } finally {
@@ -101,6 +113,89 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
           </div>
         </div>
       </div>
+
+      {/* Widget Semáforo Preventivo de Riesgo Tributario AEAT */}
+      {riskReport && (
+        <div
+          className={`p-5 rounded-xl border shadow-sm transition-all ${
+            riskReport.risk_level === 'HIGH'
+              ? 'bg-rose-50/60 border-rose-200'
+              : riskReport.risk_level === 'MEDIUM'
+              ? 'bg-amber-50/60 border-amber-200'
+              : 'bg-emerald-50/60 border-emerald-200'
+          }`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <span
+                className={`p-2.5 rounded-lg shrink-0 ${
+                  riskReport.risk_level === 'HIGH'
+                    ? 'bg-rose-100 text-rose-700'
+                    : riskReport.risk_level === 'MEDIUM'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-emerald-100 text-emerald-700'
+                }`}
+              >
+                {riskReport.risk_level === 'LOW' ? (
+                  <ShieldCheck className="w-5 h-5" />
+                ) : (
+                  <ShieldAlert className="w-5 h-5" />
+                )}
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Auditoría Preventiva AEAT • Semáforo de Riesgo Fiscal
+                  </h3>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase ${
+                      riskReport.risk_level === 'HIGH'
+                        ? 'bg-rose-600 text-white'
+                        : riskReport.risk_level === 'MEDIUM'
+                        ? 'bg-amber-600 text-white'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    Riesgo {riskReport.risk_level} ({riskReport.risk_score}/100)
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  {riskReport.risk_level === 'LOW'
+                    ? 'Todos los parámetros contables cuadran con los baremos habituales de la Agencia Tributaria. Apto para presentación oficial.'
+                    : `Se han detectado ${riskReport.total_risk_factors} factor(es) de riesgo que podrían detonar una inspección o requerimiento fiscal.`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-xs text-slate-500 font-mono">
+                Gastos: {riskReport.financial_snapshot?.purchases_base?.toFixed(2)} € / Ventas:{' '}
+                {riskReport.financial_snapshot?.sales_base?.toFixed(2)} €
+              </span>
+            </div>
+          </div>
+
+          {riskReport.risk_factors && riskReport.risk_factors.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-slate-200/60 space-y-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                Observaciones y Puntos de Atención:
+              </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {riskReport.risk_factors.map((rf: any, i: number) => (
+                  <div key={i} className="p-2.5 bg-white/80 rounded-lg border border-slate-200 text-xs space-y-1">
+                    <div className="font-bold text-slate-800 flex items-center justify-between">
+                      <span>{rf.title}</span>
+                      <span className="text-[10px] font-mono text-rose-600">+{rf.penalty} pts</span>
+                    </div>
+                    <div className="text-slate-600 text-[11px]">{rf.description}</div>
+                    <div className="text-[10px] text-indigo-700 font-medium">💡 {rf.recommendation}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Selector de Modelo Oficial */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -191,22 +286,34 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
                 Periodo: {mod303.periodo} / Ejercicio {mod303.ejercicio} • Empresa: {company.razon_social} ({company.cif})
               </p>
             </div>
-            <div
-              className={`px-4 py-2 rounded-xl border text-right ${
-                mod303.resultado > 0
-                  ? 'bg-amber-50 border-amber-200 text-amber-900'
-                  : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              }`}
-            >
-              <div className="text-[10px] font-bold uppercase tracking-wider">
-                Resultado [Casilla 46]
+            <div className="flex items-center gap-3">
+              <a
+                href={`${API_BASE}/companies/${company.id}/export/modelo-303?year=${year}&period=${period}`}
+                download={`303_${company.cif}_${year}_${period}.txt`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors"
+              >
+                <FileDown className="w-4 h-4" /> Generar Fichero Oficial BOE (.txt)
+              </a>
+
+              <div
+                className={`px-4 py-2 rounded-xl border text-right ${
+                  mod303.resultado > 0
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                }`}
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider">
+                  Resultado [Casilla 46]
+                </div>
+                <div className="text-lg font-bold font-mono">
+                  {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
+                    mod303.resultado
+                  )}
+                </div>
+                <div className="text-[10px] font-semibold">{mod303.tipo_resultado}</div>
               </div>
-              <div className="text-lg font-bold font-mono">
-                {Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
-                  mod303.resultado
-                )}
-              </div>
-              <div className="text-[10px] font-semibold">{mod303.tipo_resultado}</div>
             </div>
           </div>
 
@@ -307,13 +414,24 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
       {/* 2. MODELO 111 (Retenciones IRPF) */}
       {activeModel === '111' && mod111 && (
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 space-y-4">
-          <div className="border-b pb-4">
-            <h2 className="text-base font-bold text-slate-900">
-              Borrador Modelo 111 • Retenciones del IRPF (Profesionales y Nóminas)
-            </h2>
-            <p className="text-xs text-slate-500">
-              Rendimientos de actividades profesionales (Cuentas 4751) y perceptores identificados
-            </p>
+          <div className="flex items-center justify-between border-b pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Borrador Modelo 111 • Retenciones del IRPF (Profesionales y Nóminas)
+              </h2>
+              <p className="text-xs text-slate-500">
+                Rendimientos de actividades profesionales (Cuentas 4751) y perceptores identificados
+              </p>
+            </div>
+            <a
+              href={`${API_BASE}/companies/${company.id}/export/modelo-111?year=${year}&period=${period}`}
+              download={`111_${company.cif}_${year}_${period}.txt`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors"
+            >
+              <FileDown className="w-4 h-4" /> Generar Fichero Oficial BOE (.txt)
+            </a>
           </div>
 
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -344,13 +462,24 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
       {/* 3. MODELO 115 (Alquileres) */}
       {activeModel === '115' && mod115 && (
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 space-y-4">
-          <div className="border-b pb-4">
-            <h2 className="text-base font-bold text-slate-900">
-              Borrador Modelo 115 • Retenciones sobre Arrendamientos Urbanos
-            </h2>
-            <p className="text-xs text-slate-500">
-              Imputaciones a subcuentas de alquileres (621) y retención del 19% aplicable
-            </p>
+          <div className="flex items-center justify-between border-b pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                Borrador Modelo 115 • Retenciones sobre Arrendamientos Urbanos
+              </h2>
+              <p className="text-xs text-slate-500">
+                Imputaciones a subcuentas de alquileres (621) y retención del 19% aplicable
+              </p>
+            </div>
+            <a
+              href={`${API_BASE}/companies/${company.id}/export/modelo-115?year=${year}&period=${period}`}
+              download={`115_${company.cif}_${year}_${period}.txt`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors"
+            >
+              <FileDown className="w-4 h-4" /> Generar Fichero Oficial BOE (.txt)
+            </a>
           </div>
 
           <div className="grid grid-cols-3 gap-4 text-center">
@@ -390,8 +519,19 @@ export const TaxModelsView: React.FC<TaxModelsViewProps> = ({ company, onNotify 
                 Umbral legal obligatorio: superior a 3.005,06 € computado durante el año natural {mod347.ejercicio}
               </p>
             </div>
-            <div className="text-xs font-mono font-bold px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-200">
-              {mod347.total_declarables} Sujetos Declarables
+            <div className="flex items-center gap-3">
+              <a
+                href={`${API_BASE}/companies/${company.id}/export/modelo-347?year=${year}`}
+                download={`347_${company.cif}_${year}.txt`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-bold text-xs shadow-sm transition-colors"
+              >
+                <FileDown className="w-4 h-4" /> Generar Fichero Oficial BOE (.txt)
+              </a>
+              <div className="text-xs font-mono font-bold px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg border border-purple-200">
+                {mod347.total_declarables} Sujetos Declarables
+              </div>
             </div>
           </div>
 

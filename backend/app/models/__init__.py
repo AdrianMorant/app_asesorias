@@ -6,6 +6,7 @@ from app.models.account import Account
 from app.models.integration import CompanyIntegration, ExportBatch
 from app.models.contact import Contact
 from app.models.sales_invoice import SalesInvoice, SalesInvoiceLineItem, SalesInvoiceTaxBreakdown
+from app.models.user import User, UserRole, user_companies
 
 __all__ = [
     "Company",
@@ -20,4 +21,8 @@ __all__ = [
     "SalesInvoice",
     "SalesInvoiceLineItem",
     "SalesInvoiceTaxBreakdown",
+    "User",
+    "UserRole",
+    "user_companies",
 ]
+

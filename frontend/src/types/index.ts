@@ -305,6 +305,8 @@ export interface SalesInvoice {
   exported_to_erp: boolean;
   export_batch_id?: string | null;
   created_at: string;
+  qr_image?: string | null;
+  verifactu_hash?: string | null;
   lines: SalesInvoiceLine[];
   tax_breakdown: SalesInvoiceTax[];
 }

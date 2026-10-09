@@ -33,7 +33,8 @@ export type ActiveNavTab =
   | 'chart-of-accounts'
   | 'taxes'
   | 'integrations'
-  | 'companies';
+  | 'companies'
+  | 'advisor';
 
 export type WorkspaceMode = 'advisor' | 'client';
 
@@ -209,6 +210,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Building2,
           badge: null,
           advisorOnly: true,
+        },
+        {
+          id: 'advisor' as ActiveNavTab,
+          label: 'Portal Asesor (Multi-Tenant)',
+          icon: Briefcase,
+          badge: (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+              DESPACHO
+            </span>
+          ),
+          advisorOnly: false,
         },
       ],
     },

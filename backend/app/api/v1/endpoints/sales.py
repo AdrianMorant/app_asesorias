@@ -1,6 +1,7 @@
+import re
 from typing import List, Optional
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Request, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,10 +16,22 @@ from app.schemas.sales_invoice_dto import (
     SalesInvoiceResponse,
     UpdateSalesInvoiceStatus
 )
+from app.core.verifactu import create_verifactu_record, compute_verifactu_hash
+from app.core.facturae_generator import (
+    generate_facturae_from_sales_invoice as generate_facturae_xml,
+    validate_facturae_syntax
+)
+from app.core.audit_logger import log_security_event
 
 router = APIRouter()
 
-@router.get("/{company_id}/sales-invoices", response_model=List[SalesInvoiceResponse])
+
+class SalesInvoiceWithVerifactuResponse(SalesInvoiceResponse):
+    huella: Optional[str] = None
+    qr_payload: Optional[str] = None
+    qr_base64: Optional[str] = None
+
+@router.get("/{company_id}/sales-invoices", response_model=List[SalesInvoiceWithVerifactuResponse])
 async def list_sales_invoices(
     company_id: str,
     doc_type: Optional[str] = Query(None, description="INVOICE, ESTIMATE, PROFORMA"),
@@ -42,10 +55,22 @@ async def list_sales_invoices(
 
     stmt = stmt.order_by(SalesInvoice.issue_date.desc(), SalesInvoice.invoice_number.desc())
     res = await db.execute(stmt)
-    return res.scalars().all()
+    invoices = res.scalars().all()
+
+    output = []
+    for inv in invoices:
+        inv_dict = SalesInvoiceResponse.model_validate(inv).model_dump()
+        huella_val = getattr(inv, "huella", None)
+        if not huella_val and inv.notes and "[VERIFACTU_HUELLA:" in inv.notes:
+            m = re.search(r"\[VERIFACTU_HUELLA:([A-F0-9]{64})\]", inv.notes)
+            if m:
+                huella_val = m.group(1)
+        inv_dict["huella"] = huella_val
+        output.append(inv_dict)
+    return output
 
 
-@router.post("/{company_id}/sales-invoices", response_model=SalesInvoiceResponse)
+@router.post("/{company_id}/sales-invoices", response_model=SalesInvoiceWithVerifactuResponse)
 async def create_sales_invoice(
     company_id: str,
     payload: SalesInvoiceCreate,
@@ -108,7 +133,57 @@ async def create_sales_invoice(
     total_retention = round(total_retention, 2)
     total_amount = round(total_base + total_tax - total_retention, 2)
 
+    # 2.1 Cumplimiento Verifactu: Obtener huella de la última factura emitida de la empresa (prev_hash)
+    prev_hash = ""
+    verifactu_rec = None
+    if payload.doc_type.upper() == "INVOICE":
+        last_inv_stmt = (
+            select(SalesInvoice)
+            .where(
+                SalesInvoice.company_id == company_id,
+                SalesInvoice.doc_type == "INVOICE"
+            )
+            .order_by(SalesInvoice.created_at.desc())
+        )
+        last_inv_res = await db.execute(last_inv_stmt)
+        last_inv = last_inv_res.scalars().first()
+
+        if last_inv:
+            if getattr(last_inv, "huella", None):
+                prev_hash = last_inv.huella
+            elif last_inv.notes and "[VERIFACTU_HUELLA:" in last_inv.notes:
+                m = re.search(r"\[VERIFACTU_HUELLA:([A-F0-9]{64})\]", last_inv.notes)
+                if m:
+                    prev_hash = m.group(1)
+            else:
+                prev_hash = compute_verifactu_hash(
+                    nif_emisor=comp.cif,
+                    num_serie_factura=last_inv.invoice_number,
+                    fecha_expedicion=last_inv.issue_date,
+                    tipo_factura="F1",
+                    cuota_total=last_inv.total_tax,
+                    importe_total=last_inv.total_amount,
+                    prev_hash="",
+                )
+
+        verifactu_rec = create_verifactu_record(
+            nif_emisor=comp.cif,
+            num_serie_factura=inv_num,
+            fecha_expedicion=payload.issue_date,
+            cuota_total=total_tax,
+            importe_total=total_amount,
+            tipo_factura="F1",
+            descripcion_operacion=f"Factura emitida {inv_num} a {payload.customer_name}",
+            prev_hash=prev_hash,
+            is_verifactu_mode=True,
+        )
+
     # 3. Crear cabecera de la factura de venta
+    notes_val = payload.notes
+    if verifactu_rec:
+        huella_tag = f"[VERIFACTU_HUELLA:{verifactu_rec.huella}]"
+        notes_val = f"{notes_val} {huella_tag}".strip() if notes_val else huella_tag
+
     sales_inv = SalesInvoice(
         company_id=company_id,
         contact_id=payload.contact_id,
@@ -125,7 +200,7 @@ async def create_sales_invoice(
         total_retention=total_retention,
         total_amount=total_amount,
         status="ISSUED" if payload.doc_type.upper() == "INVOICE" else "DRAFT",
-        notes=payload.notes,
+        notes=notes_val,
         lines=processed_lines,
         tax_breakdown=[
             SalesInvoiceTaxBreakdown(
@@ -136,6 +211,8 @@ async def create_sales_invoice(
             for rate, data in taxes_map.items()
         ]
     )
+    if verifactu_rec:
+        sales_inv.huella = verifactu_rec.huella
 
     db.add(sales_inv)
     await db.flush()
@@ -239,7 +316,15 @@ async def create_sales_invoice(
         .where(SalesInvoice.id == sales_inv.id)
     )
     res = await db.execute(full_stmt)
-    return res.scalar_one()
+    inv_obj = res.scalar_one()
+
+    # Retornar respuesta enriquecida con metadatos Verifactu (huella, QR payload y QR Base64)
+    inv_dict = SalesInvoiceResponse.model_validate(inv_obj).model_dump()
+    if verifactu_rec:
+        inv_dict["huella"] = verifactu_rec.huella
+        inv_dict["qr_payload"] = verifactu_rec.qr_payload
+        inv_dict["qr_base64"] = verifactu_rec.qr_base64
+    return inv_dict
 
 
 @router.put("/sales-invoices/{invoice_id}/status")
@@ -268,3 +353,80 @@ async def delete_sales_invoice(invoice_id: str, db: AsyncSession = Depends(get_d
     await db.delete(inv)
     await db.commit()
     return {"status": "ok", "message": "Factura de venta eliminada correctamente"}
+
+
+@router.get("/{company_id}/sales-invoices/{invoice_id}/facturae")
+async def get_sales_invoice_facturae(
+    company_id: str,
+    invoice_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Genera y descarga la factura electrónica oficial en formato Facturae 3.2.2 (XML).
+    Cumplimiento normativo Ley Crea y Crece (Ley 18/2022) y FACe (Ley 25/2013).
+    """
+    comp = await db.get(Company, company_id)
+    if not comp:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+
+    stmt = (
+        select(SalesInvoice)
+        .options(
+            selectinload(SalesInvoice.lines),
+            selectinload(SalesInvoice.tax_breakdown),
+        )
+        .where(
+            SalesInvoice.id == invoice_id,
+            SalesInvoice.company_id == company_id
+        )
+    )
+    res = await db.execute(stmt)
+    inv = res.scalar_one_or_none()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Factura de venta no encontrada")
+
+    # 1. Generar el documento XML estructurado Facturae 3.2.2
+    try:
+        xml_str = generate_facturae_xml(inv, comp)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando documento Facturae: {str(exc)}"
+        )
+
+    # 2. Validar sintaxis, estructura y cuadre aritmético
+    validation = validate_facturae_syntax(xml_str)
+    if not validation.get("is_valid"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Facturae inválido según las especificaciones técnicas oficiales.",
+                "errors": validation.get("errors", [])
+            }
+        )
+
+    # 3. Registro inmutable en auditoría de seguridad y trazabilidad RGPD
+    log_security_event(
+        action="FACTURAE_DOWNLOAD",
+        resource_id=str(invoice_id),
+        request=request,
+        empresa_id=str(company_id),
+        status="SUCCESS",
+        details={
+            "invoice_number": inv.invoice_number,
+            "customer_cif": inv.customer_cif,
+            "total_amount": inv.total_amount
+        }
+    )
+
+    clean_num = re.sub(r"[^A-Za-z0-9_-]", "_", inv.invoice_number)
+    filename = f"facturae_{clean_num}.xml"
+
+    return Response(
+        content=xml_str,
+        media_type="application/xml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
